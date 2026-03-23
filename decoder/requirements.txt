@@ -1,0 +1,13 @@
+# Brain (Decoder + AI) Dependencies
+# ===================================
+
+# Excel Processing
+pandas>=2.0.0
+openpyxl>=3.1.0
+msoffcrypto-tool>=5.0.0
+
+# AI/LLM
+llama-cpp-python>=0.2.0
+
+# Utilities
+numpy>=1.24.0

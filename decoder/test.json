@@ -1,0 +1,534 @@
+[
+  {
+    "date": "02 Jan 2026",
+    "description": "Pembayaran QR ke SHELL TJ BARAT JKT DO 601422275520",
+    "amount_in": 0,
+    "amount_out": 50889,
+    "balance": 2094895.23
+  },
+  {
+    "date": "02 Jan 2026",
+    "description": "Transfer BI Fast Dari BANK JAGO WAHYU SANJAYA 104193336954 bensin 2 januari",
+    "amount_in": 50000,
+    "amount_out": 0,
+    "balance": 2144895.23
+  },
+  {
+    "date": "02 Jan 2026",
+    "description": "Pembayaran QR ke THE DOLOMITE CAFE 601426273536",
+    "amount_in": 0,
+    "amount_out": 171400,
+    "balance": 1973495.23
+  },
+  {
+    "date": "02 Jan 2026",
+    "description": "Transfer QR ke BANK MANDIRI ATHIYYAH RIZQIYANI No. Ref. 601025978767",
+    "amount_in": 0,
+    "amount_out": 100000,
+    "balance": 1873495.23
+  },
+  {
+    "date": "02 Jan 2026",
+    "description": "Transfer QR ke BANK MANDIRI ATHIYYAH RIZQIYANI No. Ref. 601021020748",
+    "amount_in": 0,
+    "amount_out": 4000,
+    "balance": 1869495.23
+  },
+  {
+    "date": "02 Jan 2026",
+    "description": "Pembayaran QR ke AEON MALL - SENTUL CITY 601023255100",
+    "amount_in": 0,
+    "amount_out": 109780,
+    "balance": 1759715.23
+  },
+  {
+    "date": "03 Jan 2026",
+    "description": "Biaya transfer BI Fast",
+    "amount_in": 0,
+    "amount_out": 2500,
+    "balance": 1757215.23
+  },
+  {
+    "date": "03 Jan 2026",
+    "description": "Transfer BI Fast Ke BRI WAHYU SANJAYA 184701008260504",
+    "amount_in": 0,
+    "amount_out": 54922,
+    "balance": 1702293.23
+  },
+  {
+    "date": "03 Jan 2026",
+    "description": "Pembayaran QR ke O SAVE POLTANGAN RAYA 601439794076",
+    "amount_in": 0,
+    "amount_out": 59500,
+    "balance": 1642793.23
+  },
+  {
+    "date": "03 Jan 2026",
+    "description": "Biaya transaksi bank Pembayaran GoPay Customer 083805396427",
+    "amount_in": 0,
+    "amount_out": 1000,
+    "balance": 1641793.23
+  },
+  {
+    "date": "03 Jan 2026",
+    "description": "Pembayaran GoPay Customer 083805396427",
+    "amount_in": 0,
+    "amount_out": 93200,
+    "balance": 1548593.23
+  },
+  {
+    "date": "04 Jan 2026",
+    "description": "Top-up e-money 6032982710851880",
+    "amount_in": 0,
+    "amount_out": 15500,
+    "balance": 1533093.23
+  },
+  {
+    "date": "04 Jan 2026",
+    "description": "Pembayaran QR ke LIMA SUAP TEBET 601444612351",
+    "amount_in": 0,
+    "amount_out": 105000,
+    "balance": 1428093.23
+  },
+  {
+    "date": "04 Jan 2026",
+    "description": "Transfer ke BANK MANDIRI ATHIYYAH RIZQIYANI 1660005895008",
+    "amount_in": 0,
+    "amount_out": 100000,
+    "balance": 1328093.23
+  },
+  {
+    "date": "04 Jan 2026",
+    "description": "Pembayaran QR ke SHELL TANJUNG BARAT 601044802006",
+    "amount_in": 0,
+    "amount_out": 57175,
+    "balance": 1270918.23
+  },
+  {
+    "date": "06 Jan 2026",
+    "description": "Transfer dari BANK MANDIRI AKMAL FADHLURRAHMAN 1560020822286",
+    "amount_in": 83000,
+    "amount_out": 0,
+    "balance": 1353918.23
+  },
+  {
+    "date": "06 Jan 2026",
+    "description": "Biaya administrasi kartu debit",
+    "amount_in": 0,
+    "amount_out": 6000,
+    "balance": 1347918.23
+  },
+  {
+    "date": "07 Jan 2026",
+    "description": "Pembayaran QR ke SHELL JATIMEKAR 1 BKS 601471370134",
+    "amount_in": 0,
+    "amount_out": 54229,
+    "balance": 1293689.23
+  },
+  {
+    "date": "07 Jan 2026",
+    "description": "Pembayaran QR ke Fajar Fotocopy, BKS SLTN 601471424940",
+    "amount_in": 0,
+    "amount_out": 31000,
+    "balance": 1262689.23
+  },
+  {
+    "date": "07 Jan 2026",
+    "description": "Pembayaran QR ke MySkill 601075444785",
+    "amount_in": 0,
+    "amount_out": 33428,
+    "balance": 1229261.23
+  },
+  {
+    "date": "07 Jan 2026",
+    "description": "Transfer BI Fast Dari BANK JAGO Muhammad Yusup 503188529476 print an",
+    "amount_in": 16000,
+    "amount_out": 0,
+    "balance": 1245261.23
+  },
+  {
+    "date": "07 Jan 2026",
+    "description": "Pembayaran QR ke Warung Yayan 601472189562",
+    "amount_in": 0,
+    "amount_out": 9000,
+    "balance": 1236261.23
+  },
+  {
+    "date": "08 Jan 2026",
+    "description": "Pembayaran QR ke warung faizah 601483344317",
+    "amount_in": 0,
+    "amount_out": 4000,
+    "balance": 1232261.23
+  },
+  {
+    "date": "09 Jan 2026",
+    "description": "Pembayaran QR ke Warung Mang Udin 601490959197",
+    "amount_in": 0,
+    "amount_out": 5000,
+    "balance": 1227261.23
+  },
+  {
+    "date": "09 Jan 2026",
+    "description": "Pembayaran QR ke WARUNG KOPI UDA 601491309864",
+    "amount_in": 0,
+    "amount_out": 6000,
+    "balance": 1221261.23
+  },
+  {
+    "date": "09 Jan 2026",
+    "description": "Pembayaran QR ke ESB RESTAURANT TECHNOLOGY 601496189252",
+    "amount_in": 0,
+    "amount_out": 54000,
+    "balance": 1167261.23
+  },
+  {
+    "date": "09 Jan 2026",
+    "description": "Pembayaran QR ke O SAVE POLTANGAN RAYA 601496585791",
+    "amount_in": 0,
+    "amount_out": 82100,
+    "balance": 1085161.23
+  },
+  {
+    "date": "10 Jan 2026",
+    "description": "Pembayaran QR ke Axis 601108555076",
+    "amount_in": 0,
+    "amount_out": 35000,
+    "balance": 1050161.23
+  },
+  {
+    "date": "11 Jan 2026",
+    "description": "Transfer BI Fast Dari BANK JAGO WAHYU SANJAYA 104193336954",
+    "amount_in": 220279,
+    "amount_out": 0,
+    "balance": 1270440.23
+  },
+  {
+    "date": "11 Jan 2026",
+    "description": "Pembayaran QR ke Kopi Kenangan QRIS App 601112879188",
+    "amount_in": 0,
+    "amount_out": 33000,
+    "balance": 1237440.23
+  },
+  {
+    "date": "11 Jan 2026",
+    "description": "Pembayaran QR ke SHELL TANJUNG BARAT 601113130586",
+    "amount_in": 0,
+    "amount_out": 55000,
+    "balance": 1182440.23
+  },
+  {
+    "date": "13 Jan 2026",
+    "description": "Pembayaran QR ke Warteg Putra Bahari, Mamp 601535675007",
+    "amount_in": 0,
+    "amount_out": 17000,
+    "balance": 1165440.23
+  },
+  {
+    "date": "13 Jan 2026",
+    "description": "Pembayaran QR ke Axis 601136831765",
+    "amount_in": 0,
+    "amount_out": 96700,
+    "balance": 1068740.23
+  },
+  {
+    "date": "14 Jan 2026",
+    "description": "Pembayaran QR ke SHELL TJ BARAT JKT DO 601548930506",
+    "amount_in": 0,
+    "amount_out": 53000,
+    "balance": 1015740.23
+  },
+  {
+    "date": "16 Jan 2026",
+    "description": "Penarikan tunai di ATM BANK MANDIRI JKT ID PTPRSDAPLTNGAN 01",
+    "amount_in": 0,
+    "amount_out": 100000,
+    "balance": 915740.23
+  },
+  {
+    "date": "17 Jan 2026",
+    "description": "Pembayaran QR ke TIX ID 601572237251",
+    "amount_in": 0,
+    "amount_out": 160000,
+    "balance": 755740.23
+  },
+  {
+    "date": "17 Jan 2026",
+    "description": "Pembayaran QR ke SHELL TANJUNG BARAT 601176156979",
+    "amount_in": 0,
+    "amount_out": 49594,
+    "balance": 706146.23
+  },
+  {
+    "date": "17 Jan 2026",
+    "description": "Top-up e-money 6032982710851880",
+    "amount_in": 0,
+    "amount_out": 10000,
+    "balance": 696146.23
+  },
+  {
+    "date": "17 Jan 2026",
+    "description": "Pembayaran QR ke A.KASOEM HEARING AID-HO 601576840212",
+    "amount_in": 0,
+    "amount_out": 80000,
+    "balance": 616146.23
+  },
+  {
+    "date": "18 Jan 2026",
+    "description": "Transfer ke BANK MANDIRI ATHIYYAH RIZQIYANI 1660005895008",
+    "amount_in": 0,
+    "amount_out": 100000,
+    "balance": 516146.23
+  },
+  {
+    "date": "19 Jan 2026",
+    "description": "Biaya transfer BI Fast",
+    "amount_in": 0,
+    "amount_out": 2500,
+    "balance": 513646.23
+  },
+  {
+    "date": "19 Jan 2026",
+    "description": "Transfer BI Fast Ke BCA MUHAMAD RIDZKI HIDAY 5310800386 kopi",
+    "amount_in": 0,
+    "amount_out": 15300,
+    "balance": 498346.23
+  },
+  {
+    "date": "19 Jan 2026",
+    "description": "Biaya transaksi bank Pembayaran GoPay Customer 083805396427",
+    "amount_in": 0,
+    "amount_out": 1000,
+    "balance": 497346.23
+  },
+  {
+    "date": "19 Jan 2026",
+    "description": "Pembayaran GoPay Customer 083805396427",
+    "amount_in": 0,
+    "amount_out": 25000,
+    "balance": 472346.23
+  },
+  {
+    "date": "20 Jan 2026",
+    "description": "Pembayaran QR ke Axis 601207577514",
+    "amount_in": 0,
+    "amount_out": 35000,
+    "balance": 437346.23
+  },
+  {
+    "date": "20 Jan 2026",
+    "description": "Pembayaran QR ke SHELL TANJUNG BARAT 601207602555",
+    "amount_in": 0,
+    "amount_out": 50000,
+    "balance": 387346.23
+  },
+  {
+    "date": "20 Jan 2026",
+    "description": "Transfer dari PT. BANK ARTOS INDONESIA WAHYU SANJAYA  botd 29044547",
+    "amount_in": 100000,
+    "amount_out": 0,
+    "balance": 487346.23
+  },
+  {
+    "date": "20 Jan 2026",
+    "description": "Transfer ke BANK MANDIRI ATHIYYAH RIZQIYANI 1660005895008",
+    "amount_in": 0,
+    "amount_out": 40660,
+    "balance": 446686.23
+  },
+  {
+    "date": "21 Jan 2026",
+    "description": "Pembayaran QR ke Axis 601215332054",
+    "amount_in": 0,
+    "amount_out": 96700,
+    "balance": 349986.23
+  },
+  {
+    "date": "22 Jan 2026",
+    "description": "Pembayaran QR ke Cireng Mini & Cibay 88, M 601620138805",
+    "amount_in": 0,
+    "amount_out": 15000,
+    "balance": 334986.23
+  },
+  {
+    "date": "22 Jan 2026",
+    "description": "Pembayaran QR ke SHELL TANJUNG BARAT 601220320336",
+    "amount_in": 0,
+    "amount_out": 54115,
+    "balance": 280871.23
+  },
+  {
+    "date": "23 Jan 2026",
+    "description": "Pembayaran QR ke WARUNG KOPI UDA 601631381406",
+    "amount_in": 0,
+    "amount_out": 6000,
+    "balance": 274871.23
+  },
+  {
+    "date": "23 Jan 2026",
+    "description": "Transfer antar Mandiri DARI SOLUSI INTEK INDONESIA Gaji Januari 2026 202601231412896526 Transfer Fee 202601231412896526",
+    "amount_in": 8647564,
+    "amount_out": 0,
+    "balance": 8922435.23
+  },
+  {
+    "date": "23 Jan 2026",
+    "description": "Biaya transfer BI Fast",
+    "amount_in": 0,
+    "amount_out": 2500,
+    "balance": 8919935.23
+  },
+  {
+    "date": "23 Jan 2026",
+    "description": "Transfer BI Fast Ke BRI WAHYU SANJAYA 184701008260504 nabung rumah",
+    "amount_in": 0,
+    "amount_out": 5000000,
+    "balance": 3919935.23
+  },
+  {
+    "date": "24 Jan 2026",
+    "description": "Pembayaran QR ke MARKAS OTODIDAK 601249265991",
+    "amount_in": 0,
+    "amount_out": 350000,
+    "balance": 3569935.23
+  },
+  {
+    "date": "25 Jan 2026",
+    "description": "Pembayaran QR ke TIX ID 601655589094",
+    "amount_in": 0,
+    "amount_out": 128000,
+    "balance": 3441935.23
+  },
+  {
+    "date": "25 Jan 2026",
+    "description": "Pembayaran QR ke Kopi Kenangan QRIS App 601252590853",
+    "amount_in": 0,
+    "amount_out": 25500,
+    "balance": 3416435.23
+  },
+  {
+    "date": "25 Jan 2026",
+    "description": "Pembayaran QR ke GOKANA TEPPAN,BLOK M 601652722716",
+    "amount_in": 0,
+    "amount_out": 131500,
+    "balance": 3284935.23
+  },
+  {
+    "date": "25 Jan 2026",
+    "description": "Top-up e-money 6032982710851880",
+    "amount_in": 0,
+    "amount_out": 10000,
+    "balance": 3274935.23
+  },
+  {
+    "date": "26 Jan 2026",
+    "description": "Pembayaran QR ke warung faizah 601668192824",
+    "amount_in": 0,
+    "amount_out": 8000,
+    "balance": 3266935.23
+  },
+  {
+    "date": "26 Jan 2026",
+    "description": "Transfer ke BANK MANDIRI AHMAD HIDAYAT ASRORI 1670004564356 kondangan yoyi",
+    "amount_in": 0,
+    "amount_out": 100000,
+    "balance": 3166935.23
+  },
+  {
+    "date": "26 Jan 2026",
+    "description": "Pembayaran QR ke SofaNur 601668934825",
+    "amount_in": 0,
+    "amount_out": 12000,
+    "balance": 3154935.23
+  },
+  {
+    "date": "26 Jan 2026",
+    "description": "Pembayaran QR ke SPBU 34 125 08 601660560330",
+    "amount_in": 0,
+    "amount_out": 25000,
+    "balance": 3129935.23
+  },
+  {
+    "date": "26 Jan 2026",
+    "description": "Penarikan tunai di ATM  BANK MANDIRI T0809276",
+    "amount_in": 0,
+    "amount_out": 1100000,
+    "balance": 2029935.23
+  },
+  {
+    "date": "26 Jan 2026",
+    "description": "Pembayaran QR ke PT Tokopedia 601660718446",
+    "amount_in": 0,
+    "amount_out": 47750,
+    "balance": 1982185.23
+  },
+  {
+    "date": "26 Jan 2026",
+    "description": "Transfer ke BANK MANDIRI ATHIYYAH RIZQIYANI 1660005895008",
+    "amount_in": 0,
+    "amount_out": 200000,
+    "balance": 1782185.23
+  },
+  {
+    "date": "27 Jan 2026",
+    "description": "Pembayaran QR ke BP TB SIMATUPANG 601272848653",
+    "amount_in": 0,
+    "amount_out": 60850,
+    "balance": 1721335.23
+  },
+  {
+    "date": "29 Jan 2026",
+    "description": "Pembayaran QR ke seblak bang aqil, JGKRS 601696837146",
+    "amount_in": 0,
+    "amount_out": 43000,
+    "balance": 1678335.23
+  },
+  {
+    "date": "30 Jan 2026",
+    "description": "Pembayaran QR ke SPBU 31.13602,CILILITAN 601709448520",
+    "amount_in": 0,
+    "amount_out": 50000,
+    "balance": 1628335.23
+  },
+  {
+    "date": "31 Jan 2026",
+    "description": "Pembayaran QR ke LOVE CHEESE 601713788349",
+    "amount_in": 0,
+    "amount_out": 25000,
+    "balance": 1603335.23
+  },
+  {
+    "date": "31 Jan 2026",
+    "description": "Pembayaran QR ke MIE AYAM BAKSO DONDON 601317548995",
+    "amount_in": 0,
+    "amount_out": 46000,
+    "balance": 1557335.23
+  },
+  {
+    "date": "31 Jan 2026",
+    "description": "Top-up e-money 6032982710851880",
+    "amount_in": 0,
+    "amount_out": 10000,
+    "balance": 1547335.23
+  },
+  {
+    "date": "31 Jan 2026",
+    "description": "Pembayaran QR ke SHELL MT HARYONO 1 601714202352",
+    "amount_in": 0,
+    "amount_out": 84000,
+    "balance": 1463335.23
+  },
+  {
+    "date": "31 Jan 2026",
+    "description": "Pembayaran QR ke Axis 601314257530",
+    "amount_in": 0,
+    "amount_out": 96700,
+    "balance": 1366635.23
+  },
+  {
+    "date": "31 Jan 2026",
+    "description": "Biaya administrasi rekening",
+    "amount_in": 0,
+    "amount_out": 5000,
+    "balance": 1361635.23
+  }
+]
