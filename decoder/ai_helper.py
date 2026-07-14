@@ -20,7 +20,7 @@ class FinancialAI:
             model_path: Optional custom model path. If None, will use default HuggingFace model
         """
         print("🤖 Loading AI model...")
-        model_path = "/Users/macbook/Documents/model_ai/Qwen2.5-Coder-3B-Instruct-Q6_K.gguf" # Custom local model path
+        model_path = "/Users/macbook/Documents/model_ai/qwen2.5-3b-instruct-q4_k_m.gguf" # Custom local model path
         try:
             if model_path:
                 # Load from local path

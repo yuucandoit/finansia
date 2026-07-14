@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
         // Seed dalam urutan yang benar untuk foreign key dependencies
         $this->call([
             BankSeeder::class,        // Bank harus pertama
+            CategorySeeder::class,    // Kategori
             SavingSeeder::class,      // Savings setelah bank
             // TransactionSeeder::class, // Transaction terakhir
         ]);

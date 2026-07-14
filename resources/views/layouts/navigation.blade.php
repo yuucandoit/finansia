@@ -33,7 +33,14 @@
             </div>
 
             <!-- Settings Dropdown -->
-            <div class="hidden sm:flex sm:items-center sm:ms-6">
+            <div class="hidden sm:flex sm:items-center sm:ms-6 gap-4">
+                <a href="{{ route('transaction.index', ['add' => 1]) }}" class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#234066] hover:bg-[#1a304e] text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-100 hover:shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Catat Transaksi
+                </a>
+
                 <x-dropdown align="right" width="48">
                     <x-slot name="trigger">
                         <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 bg-white hover:text-gray-700 focus:outline-none transition ease-in-out duration-150">
@@ -84,6 +91,20 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('transaction.index')" :active="request()->routeIs('transaction.index')">
+                {{ __('Transaksi') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('saving.index')" :active="request()->routeIs('saving.index')">
+                {{ __('Saving') }}
+            </x-responsive-nav-link>
+            <div class="px-4 py-2">
+                <a href="{{ route('transaction.index', ['add' => 1]) }}" class="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#234066] hover:bg-[#1a304e] text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    Catat Transaksi
+                </a>
+            </div>
         </div>
 
         <!-- Responsive Settings Options -->

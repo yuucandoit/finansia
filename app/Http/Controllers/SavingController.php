@@ -113,7 +113,20 @@ class SavingController extends Controller
             ->orderBy('month')
             ->get();
 
-        return view('saving_detail', compact('saving','yearly_income','yearly_spending','income_vs_spending','years', 'year'));
+        $current_balance = (float) $saving->current_balance;
+
+        // 2. Hitung total selisih transaksi dari akhir tahun yang dipilih sampai DETIK INI
+        // Jika user pilih tahun 2024, tapi sekarang 2026, kita harus hitung selisih 2025-2026
+        $diff_from_future = $saving->transaction()
+            ->where('transaction_date', '>', $year . '-12-31')
+            ->selectRaw("SUM(CASE WHEN type = 'Cash In' THEN amount ELSE 0 END) - 
+                        SUM(CASE WHEN type = 'Cash Out' THEN amount ELSE 0 END) as diff")
+            ->value('diff') ?? 0;
+
+        // Saldo tepat pada 31 Desember di tahun yang dipilih
+        $trend_saldo = $current_balance - $diff_from_future;
+
+        return view('saving_detail', compact('saving','yearly_income','yearly_spending','income_vs_spending','trend_saldo','years', 'year'));
     }
 
     public function getMonthsApi(Request $request, $id)

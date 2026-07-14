@@ -55,17 +55,17 @@ class DashboardController extends Controller
         }
         
         // Data untuk Donut Chart - Top 5 Kategori Pengeluaran Bulan Ini
-        // Gunakan description sebagai kategori
-        $topExpenses = Transaction::where('user_id', $userId)
-            ->whereIn('type', ['Cash Out'])
-            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
-            ->select('description', DB::raw('SUM(amount) as total'))
-            ->groupBy('description')
+        $topExpenses = Transaction::leftJoin('categories', 'transactions.category_id', '=', 'categories.id')
+            ->where('transactions.user_id', $userId)
+            ->whereIn('transactions.type', ['Cash Out'])
+            ->whereBetween('transactions.transaction_date', [$startOfMonth, $endOfMonth])
+            ->select(DB::raw("COALESCE(categories.name, 'Lainnya') as category_name"), DB::raw('SUM(transactions.amount) as total'))
+            ->groupBy('category_name')
             ->orderByDesc('total')
             ->limit(5)
             ->get();
         
-        $expenseLabels = $topExpenses->pluck('description')->toArray();
+        $expenseLabels = $topExpenses->pluck('category_name')->toArray();
         $expenseData = $topExpenses->pluck('total')->toArray();
         
         // Data untuk Line Chart - Trend Saldo 30 hari terakhir

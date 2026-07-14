@@ -21,4 +21,14 @@ class Transaction extends Model
         'transaction_date',
         'attachment',
     ];
+
+    public function category()
+    {
+        return $this->belongsTo(Category::class, 'category_id');
+    }
+
+    public function savingAccount()
+    {
+        return $this->belongsTo(Saving::class, 'savings_id');
+    }
 }

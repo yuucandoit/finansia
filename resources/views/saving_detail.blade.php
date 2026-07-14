@@ -105,6 +105,16 @@
 
         </div>
 
+        <!-- Transaction Line Trend Saldo Chart -->
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+            <div class="text-center pt-4">
+                <h3 class="text-lg font-bold text-gray-800">Trend Saldo</h3>
+            </div>
+            <div class="h-full p-8">
+                <canvas id="trendSaldo" style="width: 100%; height: 400px;"></canvas>
+            </div>
+        </div>
+
 
         <!-- Transaction Line Income vs spending Chart -->
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
@@ -128,72 +138,54 @@
 
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{{-- Script Trend Saldo --}}
 <script>
-    const rawData = @json($income_vs_spending);
+    const rawData = @json($income_vs_spending); // Data dari bulan 12 ke 1
+    let runningBalance = parseFloat(@json($trend_saldo));
 
-    // 1. Siapkan Label Nama Bulan
-    const monthLabels = [
-        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
+    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const trendData = Array(12).fill(null);
 
-    // 2. Map data dari DB ke Array 12 Bulan (isi 0 jika data bulan tersebut tidak ada)
-    const incomeData = Array(12).fill(0);
-    const spendingData = Array(12).fill(0);
-
+    // Map data DB ke object
+    const monthlyStats = {};
     rawData.forEach(item => {
-        // Karena EXTRACT(MONTH) di Postgres mengembalikan 1-12, kita kurangi 1 untuk index array (0-11)
-        const monthIndex = parseInt(item.month) - 1; 
-        incomeData[monthIndex] = parseFloat(item.income);
-        spendingData[monthIndex] = parseFloat(item.spending);
+        monthlyStats[parseInt(item.month)] = {
+            net: parseFloat(item.income) - parseFloat(item.spending)
+        };
     });
 
-    // 3. Inisialisasi Chart.js
-    const ctx = document.getElementById('income_vs_spend').getContext('2d');
+    // HITUNG MUNDUR: Dari Desember (index 11) ke Januari (index 0)
+    for (let i = 12; i >= 1; i--) {
+        // Simpan saldo AKHIR bulan tersebut ke grafik
+        trendData[i-1] = runningBalance;
+
+        // Untuk mendapatkan saldo AWAL bulan ini (yang jadi saldo akhir bulan lalu),
+        // kita kurangi dengan net transaksi bulan ini
+        if (monthlyStats[i]) {
+            runningBalance -= monthlyStats[i].net;
+        }
+    }
+
+    const ctx = document.getElementById('trendSaldo').getContext('2d');
     new Chart(ctx, {
         type: 'line',
         data: {
-            labels: monthLabels,
-            datasets: [
-                {
-                    label: 'Income',
-                    data: incomeData,
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    tension: 0.3,
-                    fill: true
-                },
-                {
-                    label: 'Spending',
-                    data: spendingData,
-                    borderColor: 'rgb(255, 99, 132)',
-                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                    tension: 0.3,
-                    fill: true
-                }
-            ]
+            labels: labels,
+            datasets: [{
+                label: 'Trend Saldo',
+                data: trendData,
+                borderColor: '#6366F1',
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 4
+            }]
         },
         options: {
             responsive: true,
-            plugins: {
-                legend: { position: 'top' },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) label += ': ';
-                            if (context.parsed.y !== null) {
-                                // Format ke mata uang (IDR)
-                                label += new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(context.parsed.y);
-                            }
-                            return label;
-                        }
-                    }
-                }
-            },
+            maintainAspectRatio: false,
             scales: {
                 y: {
-                    beginAtZero: true,
                     ticks: {
                         callback: function(value) {
                             return 'Rp ' + value.toLocaleString('id-ID');
@@ -203,6 +195,67 @@
             }
         }
     });
+</script>
+
+{{-- Script Income Vs Spend --}}
+<script>
+    (function() {
+        const ivsRawData = @json($income_vs_spending);
+        const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const incomeData = Array(12).fill(0);
+        const spendingData = Array(12).fill(0);
+
+        ivsRawData.forEach(item => {
+            const monthIndex = parseInt(item.month) - 1; 
+            incomeData[monthIndex] = parseFloat(item.income);
+            spendingData[monthIndex] = parseFloat(item.spending);
+        });
+
+        const ivsCtx = document.getElementById('income_vs_spend').getContext('2d');
+        new Chart(ivsCtx, {
+            type: 'line',
+            data: {
+                labels: monthLabels,
+                datasets: [
+                    {
+                        label: 'Income',
+                        data: incomeData,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.3,
+                        fill: true
+                    },
+                    {
+                        label: 'Spending',
+                        data: spendingData,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        tension: 0.3,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                label += new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(context.parsed.y);
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { callback: value => 'Rp ' + value.toLocaleString('id-ID') } }
+                }
+            }
+        });
+    })();
 </script>
 
 {{-- Accordion --}}

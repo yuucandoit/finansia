@@ -64,9 +64,43 @@ def handle_mandiri(df):
     return result
 
 def handle_bri(df):
-    """Logic khusus untuk merapikan kolom BRI."""
-    # BRI punya format yang berbeda lagi (biasanya ada baris kosong di awal)
-    return df
+    # 1. Bersihkan spasi pada nama kolom (antisipasi bad formatting)
+    df.columns = [str(col).strip() for col in df.columns]
+    
+    # 2. BRImo CSV biasanya langsung memiliki header di baris pertama.
+    # Kita buat mapping berdasarkan nama kolom eksak di file Anda.
+    
+    # Pilih deskripsi yang paling lengkap (REMARK_CUSTOM di BRI paling informatif)
+    desc_col = 'REMARK_CUSTOM' if 'REMARK_CUSTOM' in df.columns else 'DESK_TRAN'
+    
+    mapping = {
+        'TGL_TRAN': 'date',
+        desc_col: 'description',
+        'MUTASI_KREDIT': 'amount_in',
+        'MUTASI_DEBET': 'amount_out',
+        'SALDO_AKHIR_MUTASI': 'balance'
+    }
+    
+    # 3. Cek apakah kolom-kolom di atas ada di DataFrame
+    available_cols = [c for c in mapping.keys() if c in df.columns]
+    
+    # Ambil hanya kolom yang kita butuhkan saja
+    new_df = df[available_cols].copy()
+    
+    # Rename kolom ke format yang dimengerti PHP
+    new_df = new_df.rename(columns=mapping)
+    
+    # 4. Formatting Data
+    # Tanggal BRI: 2026-03-01 23:38:28 -> diubah ke 01 Mar 2026
+    if 'date' in new_df.columns:
+        new_df['date'] = pd.to_datetime(new_df['date']).dt.strftime('%d %b %Y')
+    
+    # Pastikan angka bersih (menghilangkan NaN atau string kosong)
+    for col in ['amount_in', 'amount_out', 'balance']:
+        if col in new_df.columns:
+            new_df[col] = pd.to_numeric(new_df[col], errors='coerce').fillna(0)
+            
+    return new_df
 
 def handle_bca(df):
     """Logic khusus untuk merapikan kolom BCA."""

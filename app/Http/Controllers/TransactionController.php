@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Saving;
 use App\Models\Transaction;
 use App\Models\Transaction_Item;
+use App\Models\Category;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class TransactionController extends Controller
 {
@@ -17,7 +19,7 @@ class TransactionController extends Controller
     public function index(Request $request)
     {
         $userId = auth()->id();
-        $query = Transaction::where('user_id', $userId);
+        $query = Transaction::with(['category', 'savingAccount'])->where('user_id', $userId);
 
         // Filter Search
         if ($request->has('search') && $request->search != '') {
@@ -52,10 +54,12 @@ class TransactionController extends Controller
             ->sum('amount');
 
         $saving = Saving::where('user_id', $userId)->get();
+        $categories = Category::orderBy('name')->get();
         
         return view('transaction', [
             'transaction'  => $transaction,
             'saving'       => $saving,
+            'categories'   => $categories,
             'totalCashIn'  => $totalCashIn,
             'totalCashOut' => $totalCashOut,
         ]);
@@ -80,21 +84,83 @@ class TransactionController extends Controller
             'description' => 'required|string|max:255',
             'type' => 'required|in:Cash In,Cash Out,Transfer,Tabungan',
             'amount' => 'required|numeric|min:0',
-            'savings_id' => 'nullable|exists:savings,id',
+            'savings_id' => 'required|exists:savings,id',
+            'destination_savings_id' => 'nullable|exists:savings,id',
+            'category_id' => 'nullable|exists:categories,id',
+            'fee' => 'nullable|numeric|min:0',
             'transaction_date' => 'nullable|date',
         ]);
 
-        Transaction::create([
-            'user_id' => auth()->id(),
-            'savings_id' => $request->savings_id,
-            'type' => $request->type,
-            'description' => $request->description,
-            'amount' => $request->amount,
-            'transaction_date' => $request->transaction_date ?? now(),
-            'is_manual' => true,
-        ]);
+        $userId = auth()->id();
+        $date = $request->transaction_date ?? now();
+        $amount = (float) $request->amount;
+        $fee = (float) ($request->fee ?? 0);
+        $categoryId = $request->category_id;
 
-        return redirect()->route('transaction.index')->with('success', 'Transaksi berhasil ditambahkan!');
+        try {
+            DB::transaction(function () use ($userId, $request, $date, $amount, $fee, $categoryId) {
+                if ($request->type === 'Transfer' || ($request->type === 'Tabungan' && $request->destination_savings_id)) {
+                    $sourceSaving = Saving::where('user_id', $userId)->findOrFail($request->savings_id);
+                    $destSaving = Saving::where('user_id', $userId)->findOrFail($request->destination_savings_id);
+
+                    // 1. Transaction Out on Source Account
+                    Transaction::create([
+                        'user_id' => $userId,
+                        'savings_id' => $sourceSaving->id,
+                        'category_id' => $categoryId,
+                        'type' => $request->type,
+                        'description' => $request->description . ' (ke ' . $destSaving->name . ')',
+                        'amount' => $amount,
+                        'fee' => $fee > 0 ? $fee : null,
+                        'transaction_date' => $date,
+                        'is_manual' => true,
+                    ]);
+
+                    $sourceSaving->decrement('current_balance', $amount + $fee);
+
+                    // 2. Transaction In on Destination Account
+                    Transaction::create([
+                        'user_id' => $userId,
+                        'savings_id' => $destSaving->id,
+                        'category_id' => $categoryId,
+                        'type' => $request->type,
+                        'description' => $request->description . ' (dari ' . $sourceSaving->name . ')',
+                        'amount' => $amount,
+                        'fee' => null,
+                        'transaction_date' => $date,
+                        'is_manual' => true,
+                    ]);
+
+                    $destSaving->increment('current_balance', $amount);
+
+                } else {
+                    $saving = Saving::where('user_id', $userId)->findOrFail($request->savings_id);
+
+                    Transaction::create([
+                        'user_id' => $userId,
+                        'savings_id' => $saving->id,
+                        'category_id' => $categoryId,
+                        'type' => $request->type,
+                        'description' => $request->description,
+                        'amount' => $amount,
+                        'fee' => $fee > 0 ? $fee : null,
+                        'transaction_date' => $date,
+                        'is_manual' => true,
+                    ]);
+
+                    if ($request->type === 'Cash In') {
+                        $saving->increment('current_balance', $amount);
+                    } else {
+                        // Cash Out or Tabungan without destination
+                        $saving->decrement('current_balance', $amount + $fee);
+                    }
+                }
+            });
+
+            return redirect()->route('transaction.index')->with('success', 'Transaksi berhasil ditambahkan!');
+        } catch (\Exception $e) {
+            return redirect()->route('transaction.index')->with('error', 'Gagal menambahkan transaksi: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -243,6 +309,8 @@ class TransactionController extends Controller
                 $bankType = 'mandiri';
             } elseif (str_contains($bankName, 'bca')) {
                 $bankType = 'bca';
+            } elseif (str_contains($bankName, 'bri')) {
+                $bankType = 'bri';
             }
 
             // Save uploaded file temporarily
@@ -315,6 +383,9 @@ class TransactionController extends Controller
                 $amount = $trans['amount_out'] ?? 0;
                 $lastTransaction = end($transactions);
                 $latestBalance = $lastTransaction['balance'] ?? null;
+                $latestTransactionDate = \Carbon\Carbon::createFromFormat('d M Y', $lastTransaction['date']);
+                $isSameMonth = $latestTransactionDate->isCurrentMonth();
+                $isSameYear = $latestTransactionDate->isCurrentYear();
                 
                 if (($trans['amount_in'] ?? 0) > 0) {
                     $type = 'Cash In';
@@ -329,16 +400,22 @@ class TransactionController extends Controller
                     $transactionDate = now();
                 }
 
-                Transaction::create([
-                    'user_id' => auth()->id(),
-                    'savings_id' => $saving->id,
-                    'type' => $type,
-                    'description' => $trans['description'] ?? 'Import dari e-statement',
-                    'amount' => $amount,
-                    'transaction_date' => $transactionDate,
-                    'is_manual' => false,
-                ]);
-                if ($latestBalance !== null) {
+                Transaction::updateOrCreate(
+                    [
+                        // 1. Array pertama: Kolom untuk "pencarian" (Uniqueness)
+                        'user_id' => auth()->id(),
+                        'savings_id' => $saving->id,
+                        'transaction_date' => $transactionDate,
+                        'amount' => $amount,
+                        'description' => $trans['description'] ?? 'Import dari e-statement',
+                    ],
+                    [
+                        // 2. Array kedua: Kolom yang mau di-update/set
+                        'type' => $type,
+                        'is_manual' => false,
+                    ]
+                );
+                if ($latestBalance !== null && ($isSameMonth && $isSameYear)) {
                     Saving::where('id', $saving->id)->update([
                         'current_balance' => $latestBalance
                     ]);
