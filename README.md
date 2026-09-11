@@ -1,21 +1,23 @@
-<p align="center">
-  <img src="public/assets/logo/logofinansiabaru.png" alt="Finansia Logo" width="120">
-</p>
+<div align="center">
+  <img src="public/assets/logo/logofinansiabaru_512x512.png" alt="Finansia Logo" width="140" style="border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-bottom: 12px;">
 
-<h1 align="center">Finansia — Smart Personal Finance & AI Assistant</h1>
+  # Finansia
+  ### *Smart Personal Finance & AI Financial Assistant*
 
-<p align="center">
-  Aplikasi manajemen keuangan pribadi modern berbasis <strong>Laravel 11</strong>, <strong>Tailwind CSS</strong>, <strong>PostgreSQL</strong>, dan <strong>OpenRouter AI</strong> dengan fitur unggulan pencatatan transaksi percakapan otomatis, analisis finansial cerdas, serta dekripsi e-statement mutasi bank resmi.
-</p>
+  <p align="center">
+    Aplikasi manajemen keuangan pribadi modern berbasis <strong>Laravel 13</strong>, <strong>Tailwind CSS</strong>, <strong>PostgreSQL</strong>, dan <strong>OpenRouter AI</strong>.<br>
+    Dilengkapi pencatatan transaksi percakapan otomatis, analisis finansial cerdas, serta dekripsi e-statement mutasi bank resmi.
+  </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Laravel-11.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white" alt="Laravel 11">
-  <img src="https://img.shields.io/badge/PHP-8.2+-777BB4?style=for-the-badge&logo=php&logoColor=white" alt="PHP 8.2+">
-  <img src="https://img.shields.io/badge/PostgreSQL-5432-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
-  <img src="https://img.shields.io/badge/Tailwind_CSS-3.x-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS">
-  <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/OpenRouter-AI_Engine-6366F1?style=for-the-badge&logo=openai&logoColor=white" alt="OpenRouter AI">
-</p>
+  <p align="center">
+    <a href="https://laravel.com"><img src="https://img.shields.io/badge/Laravel-13.x-FF2D20?style=for-the-badge&logo=laravel&logoColor=white" alt="Laravel 13"></a>
+    <a href="https://php.net"><img src="https://img.shields.io/badge/PHP-8.2+-777BB4?style=for-the-badge&logo=php&logoColor=white" alt="PHP 8.2+"></a>
+    <a href="https://www.postgresql.org"><img src="https://img.shields.io/badge/PostgreSQL-5432-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"></a>
+    <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind_CSS-3.x-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white" alt="Tailwind CSS"></a>
+    <a href="https://www.python.org"><img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python"></a>
+    <a href="https://openrouter.ai"><img src="https://img.shields.io/badge/OpenRouter-AI_Engine-6366F1?style=for-the-badge&logo=openai&logoColor=white" alt="OpenRouter AI"></a>
+  </p>
+</div>
 
 ---
 
@@ -105,7 +107,7 @@
 
 | Komponen | Teknologi |
 | :--- | :--- |
-| **Backend Framework** | [Laravel 11.x](https://laravel.com/) (PHP 8.2+) |
+| **Backend Framework** | [Laravel 13.x](https://laravel.com/) (PHP 8.2+) |
 | **Database** | [PostgreSQL](https://www.postgresql.org/) (dengan support soft deletes & transactions) |
 | **Frontend UI** | Blade Templating, [Tailwind CSS](https://tailwindcss.com/), [Vite](https://vitejs.dev/) |
 | **Interaktivitas UI** | Vanilla JS, [Alpine.js](https://alpinejs.dev/), jQuery, [Chart.js](https://www.chartjs.org/) |
