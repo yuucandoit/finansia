@@ -1,13 +1,13 @@
 <div id="ai-chatbot-container" class="fixed bottom-6 right-6 z-50 flex flex-col items-end font-sans">
 
-    <!-- Floating Chatbot Window (Default: Hidden / Closed) -->
+    
     <div id="ai-chatbot-window" 
          class="hidden w-[360px] sm:w-[390px] bg-white rounded-3xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col transition-all duration-300 transform origin-bottom-right">
         
-        <!-- Header -->
+        
         <div class="bg-[#234066] px-5 py-4 flex items-center justify-between text-white select-none shadow-sm">
             <div class="flex items-center gap-3">
-                <!-- Bot Avatar Icon (White Circle with Robot Face) -->
+                
                 <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm flex-shrink-0">
                     <svg class="w-6 h-6 text-[#234066]" viewBox="0 0 24 24" fill="currentColor">
                         <circle cx="12" cy="4" r="1.5" />
@@ -18,7 +18,7 @@
                         <circle cx="9" cy="12" r="0.8" fill="#234066" />
                         <circle cx="15" cy="12" r="0.8" fill="#234066" />
                         <path d="M10 15h4" stroke="white" stroke-width="1.5" stroke-linecap="round" />
-                        <!-- Ears / Antennas -->
+                        
                         <path d="M3.5 11a1.5 1.5 0 0 1 1.5-1.5v5A1.5 1.5 0 0 1 3.5 13v-2zM19 9.5a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5v-5z" />
                     </svg>
                 </div>
@@ -31,7 +31,7 @@
                 </div>
             </div>
 
-            <!-- Minimize / Close Button -->
+            
             <button type="button" 
                     onclick="toggleAiChatbot()" 
                     class="text-white/80 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors"
@@ -42,10 +42,10 @@
             </button>
         </div>
 
-        <!-- Chat Content Area -->
+        
         <div id="ai-chat-messages" class="p-4 space-y-4 bg-slate-50/50 max-h-[440px] min-h-[320px] overflow-y-auto scroll-smooth">
             
-            <!-- Initial Greeting Message (How can I help you today?) -->
+            
             <div class="flex justify-start gap-2.5 items-start">
                 <div class="w-7 h-7 rounded-full bg-[#234066] text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
                     <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -77,7 +77,7 @@
 
         </div>
 
-        <!-- Input Box Area -->
+        
         <div class="p-3 bg-white border-t border-gray-100">
             <form onsubmit="handleAiChatSubmit(event)" class="flex items-center gap-2">
                 <div class="relative flex-1">
@@ -91,7 +91,7 @@
                         id="ai-chatbot-send-btn"
                         class="p-2 text-[#234066] hover:text-[#182c47] hover:bg-blue-50 rounded-xl transition-all flex items-center justify-center flex-shrink-0 disabled:opacity-50"
                         title="Kirim pesan">
-                    <!-- Telegram Paper Plane Outline SVG -->
+                    
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-6 h-6 rotate-45 -translate-y-0.5 translate-x-0.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
                     </svg>
@@ -101,7 +101,7 @@
 
     </div>
 
-    <!-- Floating Action Button (Default: Shown when minimized) -->
+    
     <button id="ai-chatbot-trigger" 
             type="button"
             onclick="toggleAiChatbot()" 
@@ -124,10 +124,9 @@
 </div>
 
 <script>
-    // Global storage for pending AI transactions (avoids inline JSON escaping bugs)
+
     window.aiPendingTransactions = window.aiPendingTransactions || {};
 
-    // 1. Toggle Popup Chatbot
     function toggleAiChatbot() {
         const chatWindow = document.getElementById('ai-chatbot-window');
         const triggerBtn = document.getElementById('ai-chatbot-trigger');
@@ -153,7 +152,6 @@
         }
     }
 
-    // 2. Kirim pesan ke Backend AI
     async function handleAiChatSubmit(e) {
         e.preventDefault();
         const input = document.getElementById('ai-chatbot-input');
@@ -164,7 +162,6 @@
 
         const userText = input.value.trim();
 
-        // Tampilkan bubble pesan pengguna
         const userBubble = document.createElement('div');
         userBubble.className = 'flex justify-end';
         userBubble.innerHTML = `
@@ -178,7 +175,6 @@
         sendBtn.disabled = true;
         messageContainer.scrollTop = messageContainer.scrollHeight;
 
-        // Tampilkan Loading Indicator
         const loadingId = 'ai-loading-' + Date.now();
         const loadingEl = document.createElement('div');
         loadingEl.id = loadingId;
@@ -230,18 +226,15 @@
         messageContainer.scrollTop = messageContainer.scrollHeight;
     }
 
-    // 3. Render Kartu Konfirmasi Transaksi
     function renderConfirmationCard(data, replyText, container) {
         const cardId = 'card-' + Date.now();
-        
-        // Simpan data ke objek global dengan key cardId agar tidak rusak saat di-pass
+
         window.aiPendingTransactions[cardId] = data;
 
         const cardEl = document.createElement('div');
         cardEl.id = cardId;
         cardEl.className = 'bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3';
-        
-        // Buat opsi dropdown rekening
+
         let savingsOptions = '';
         if (data.available_savings && data.available_savings.length > 0) {
             savingsOptions = data.available_savings.map(s => 
@@ -251,7 +244,6 @@
             savingsOptions = `<option value="${data.savings_id}" selected>${escapeHtml(data.account_name)}</option>`;
         }
 
-        // Buat opsi dropdown kategori
         let categoryOptions = '';
         if (data.available_categories && data.available_categories.length > 0) {
             categoryOptions = data.available_categories.map(c => 
@@ -262,7 +254,7 @@
         }
 
         cardEl.innerHTML = `
-            <!-- Key-Value Row Details -->
+            
             <div class="space-y-2.5 text-sm">
                 <div class="flex items-center">
                     <span class="w-24 text-gray-900 font-bold">Jenis:</span>
@@ -298,10 +290,10 @@
                 </div>
             </div>
 
-            <!-- Separator -->
+            
             <hr class="border-gray-200 my-2">
 
-            <!-- Action Buttons for User Validation -->
+            
             <div id="actions-${cardId}" class="flex items-center gap-2 pt-1">
                 <button type="button" 
                         onclick="cancelTransaction('${cardId}')"
@@ -318,7 +310,6 @@
         container.appendChild(cardEl);
     }
 
-    // 4. Aksi User: Batal (TIDAK Disimpan ke Database)
     function cancelTransaction(cardId) {
         delete window.aiPendingTransactions[cardId];
 
@@ -336,7 +327,6 @@
         messageContainer.scrollTop = messageContainer.scrollHeight;
     }
 
-    // 5. Aksi User: Konfirmasi & Simpan (DISIMPAN ke Database)
     async function confirmAndSaveTransaction(cardId) {
         const data = window.aiPendingTransactions[cardId];
         const actionsContainer = document.getElementById('actions-' + cardId);

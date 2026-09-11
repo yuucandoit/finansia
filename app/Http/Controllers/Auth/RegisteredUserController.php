@@ -39,12 +39,15 @@ class RegisteredUserController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'role' => 'user',
+            'status' => 'pending',
         ]);
 
         event(new Registered($user));
 
-        Auth::login($user);
-
-        return redirect(route('dashboard', absolute: false));
+        return redirect()->route('login')->with(
+            'registered_pending',
+            'Pendaftaran akun berhasil! Akun Anda sedang menunggu persetujuan (approval) dari Master Mind (wahyusnjy). Silakan tunggu hingga akun disetujui untuk dapat masuk.'
+        );
     }
 }

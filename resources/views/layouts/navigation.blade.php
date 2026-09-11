@@ -30,6 +30,19 @@
                         {{ __('Saving') }}
                     </x-nav-link>
                 </div>
+                @if(Auth::user()->isMasterMind())
+                    <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                        <x-nav-link :href="route('admin.approvals.index')" :active="request()->routeIs('admin.approvals.*')" class="flex items-center gap-1.5">
+                            <span>{{ __('Persetujuan User') }}</span>
+                            @php $pendingCount = \App\Models\User::pendingApprovalsCount(); @endphp
+                            @if($pendingCount > 0)
+                                <span class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold text-white bg-rose-500 rounded-full animate-pulse shadow-sm">
+                                    {{ $pendingCount }}
+                                </span>
+                            @endif
+                        </x-nav-link>
+                    </div>
+                @endif
             </div>
 
             <!-- Settings Dropdown -->
@@ -97,6 +110,17 @@
             <x-responsive-nav-link :href="route('saving.index')" :active="request()->routeIs('saving.index')">
                 {{ __('Saving') }}
             </x-responsive-nav-link>
+            @if(Auth::user()->isMasterMind())
+                @php $pendingCount = \App\Models\User::pendingApprovalsCount(); @endphp
+                <x-responsive-nav-link :href="route('admin.approvals.index')" :active="request()->routeIs('admin.approvals.*')" class="flex items-center justify-between">
+                    <span>{{ __('Persetujuan User') }}</span>
+                    @if($pendingCount > 0)
+                        <span class="px-2 py-0.5 text-[10px] font-bold text-white bg-rose-500 rounded-full">
+                            {{ $pendingCount }} pending
+                        </span>
+                    @endif
+                </x-responsive-nav-link>
+            @endif
             <div class="px-4 py-2">
                 <a href="{{ route('transaction.index', ['add' => 1]) }}" class="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#234066] hover:bg-[#1a304e] text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-100">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">

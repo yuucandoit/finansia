@@ -21,6 +21,8 @@ class DatabaseSeeder extends Seeder
             'name' => 'Wahyu sanjaya',
             'email' => 'wahyusnjy@gmail.com',
             'password' => bcrypt('password'),
+            'role' => 'admin',
+            'status' => 'approved',
         ]);
 
         // Seed dalam urutan yang benar untuk foreign key dependencies

@@ -5,15 +5,15 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SavingController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\AiChatController;
+use App\Http\Controllers\Admin\UserApprovalController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    if(Auth::check()){
+    if (Auth::check()) {
         return redirect()->route('dashboard');
-    }else{
-        return view('auth.login');
     }
-});
+    return view('landing');
+})->name('landing');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
@@ -40,6 +40,13 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'verified'])->prefix('ai-chat')->group(function () {
     Route::post('/parse', [AiChatController::class, 'parse'])->name('ai.parse');
     Route::post('/save', [AiChatController::class, 'save'])->name('ai.save');
+});
+
+Route::middleware(['auth', 'verified', 'master_mind'])->prefix('admin/user-approvals')->name('admin.approvals.')->group(function () {
+    Route::get('/', [UserApprovalController::class, 'index'])->name('index');
+    Route::post('/{user}/approve', [UserApprovalController::class, 'approve'])->name('approve');
+    Route::post('/{user}/reject', [UserApprovalController::class, 'reject'])->name('reject');
+    Route::delete('/{user}', [UserApprovalController::class, 'destroy'])->name('destroy');
 });
 
 require __DIR__.'/auth.php';

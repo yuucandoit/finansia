@@ -21,6 +21,8 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
+        'status',
     ];
 
     /**
@@ -54,5 +56,30 @@ class User extends Authenticatable
     public function transactions()
     {
         return $this->hasMany(Transaction::class);
+    }
+
+    public function isMasterMind(): bool
+    {
+        return $this->role === 'admin' || strtolower((string) $this->email) === 'wahyusnjy@gmail.com';
+    }
+
+    public function isApproved(): bool
+    {
+        return $this->isMasterMind() || $this->status === 'approved';
+    }
+
+    public function isPending(): bool
+    {
+        return $this->status === 'pending';
+    }
+
+    public function isRejected(): bool
+    {
+        return $this->status === 'rejected';
+    }
+
+    public static function pendingApprovalsCount(): int
+    {
+        return static::where('status', 'pending')->count();
     }
 }

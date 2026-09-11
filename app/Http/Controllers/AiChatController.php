@@ -29,19 +29,15 @@ class AiChatController extends Controller
         $user = $request->user() ?? Auth::user();
         $userMessage = $request->input('message');
 
-        // Ambil daftar rekening milik pengguna
         $savings = $user->savings()->get();
         $accountsList = $savings->pluck('name')->toArray();
 
-        // Ambil daftar kategori pengeluaran & pemasukan
         $categories = Category::all();
         $categoriesList = $categories->pluck('name')->toArray();
 
-        // 1. Cek intent & parse menggunakan AI
         $result = $aiService->parseMessage($userMessage, $accountsList, $categoriesList);
         $intent = $result['intent'] ?? 'GENERAL_CHAT';
 
-        // 2. Jika user bertanya tentang kondisi finansial (FINANCIAL_QUERY)
         if ($intent === 'FINANCIAL_QUERY') {
             $snapshot = $contextService->getUserSnapshot($user);
             $aiAnswer = $aiService->answerFinancialQuery($userMessage, $snapshot);
@@ -54,7 +50,6 @@ class AiChatController extends Controller
             ]);
         }
 
-        // 3. Jika user ingin mencatat transaksi (RECORD_TRANSACTION)
         if ($intent === 'RECORD_TRANSACTION' && !empty($result['data'])) {
             if ($savings->isEmpty()) {
                 return response()->json([
@@ -67,15 +62,12 @@ class AiChatController extends Controller
 
             $extracted = $result['data'];
 
-            // Tentukan Tipe Transaksi
             $rawType = strtolower($extracted['type'] ?? 'cash_out');
             $type = ($rawType === 'cash_in' || $rawType === 'pemasukan') ? 'Cash In' : 'Cash Out';
             $typeLabel = $type === 'Cash In' ? 'Pemasukan (Cash In)' : 'Pengeluaran (Cash Out)';
 
-            // Tentukan Nominal
             $amount = abs((float)($extracted['amount'] ?? 0));
 
-            // Cocokkan Rekening Tabungan dengan milik pengguna di database
             $extractedAccName = strtolower(trim($extracted['account_name'] ?? ''));
             $matchedSaving = null;
 
@@ -87,12 +79,10 @@ class AiChatController extends Controller
                 }
             }
 
-            // Fallback jika belum cocok: gunakan rekening pertama user
             if (!$matchedSaving) {
                 $matchedSaving = $savings->first();
             }
 
-            // Cocokkan Kategori dengan kategori di database
             $extractedCatName = strtolower(trim($extracted['category'] ?? ''));
             $matchedCategory = null;
 
@@ -108,7 +98,6 @@ class AiChatController extends Controller
                 $matchedCategory = $categories->firstWhere('name', 'Lainnya') ?? $categories->first();
             }
 
-            // Tanggal
             $dateStr = $extracted['date'] ?? now()->format('Y-m-d');
             try {
                 $dateObj = Carbon::parse($dateStr);
@@ -140,7 +129,6 @@ class AiChatController extends Controller
             ]);
         }
 
-        // 4. Respon Percakapan Umum / Bantuan (GENERAL_CHAT)
         return response()->json([
             'status' => 'success',
             'intent' => 'GENERAL_CHAT',
@@ -173,12 +161,11 @@ class AiChatController extends Controller
 
         $userId = Auth::id();
 
-        // Pastikan rekening yang dipilih milik pengguna yang sedang login
         $saving = Saving::where('user_id', $userId)->findOrFail($validated['savings_id']);
 
         try {
             DB::transaction(function () use ($userId, $validated, $saving) {
-                // Buat record transaksi
+
                 Transaction::create([
                     'user_id' => $userId,
                     'savings_id' => $saving->id,
@@ -190,7 +177,6 @@ class AiChatController extends Controller
                     'is_manual' => true,
                 ]);
 
-                // Update saldo rekening
                 if ($validated['type'] === 'Cash In') {
                     $saving->increment('current_balance', $validated['amount']);
                 } else {

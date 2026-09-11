@@ -49,6 +49,23 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        $user = Auth::user();
+
+        if ($user && ! $user->isApproved()) {
+            Auth::guard('web')->logout();
+            RateLimiter::hit($this->throttleKey());
+
+            if ($user->isRejected()) {
+                throw ValidationException::withMessages([
+                    'email' => 'Mohon maaf, pendaftaran akun Anda ditolak oleh Master Mind (wahyusnjy).',
+                ]);
+            }
+
+            throw ValidationException::withMessages([
+                'email' => 'Akun Anda masih menunggu persetujuan (approval) dari Master Mind (wahyusnjy). Silakan hubungi admin atau tunggu hingga akun diaktifkan.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 
