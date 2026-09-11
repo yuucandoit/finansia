@@ -32,5 +32,8 @@
                 {{ $slot }}
             </main>
         </div>
+
+        <!-- AI Chatbot Assistant Floating UI Component -->
+        <x-ai-chatbot />
     </body>
 </html>

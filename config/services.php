@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'openrouter' => [
+        'api_key' => env('OPENROUTER_API_KEY'),
+        'primary_model' => env('OPENROUTER_PRIMARY_MODEL', 'nex-agi/nex-n2.5-mini:free'),
+        'fallback_model' => env('OPENROUTER_FALLBACK_MODEL', 'inclusionai/ling-3.0-flash-fin:free'),
+    ],
+
 ];
