@@ -103,6 +103,10 @@ class TransactionController extends Controller
                     $sourceSaving = Saving::where('user_id', $userId)->findOrFail($request->savings_id);
                     $destSaving = Saving::where('user_id', $userId)->findOrFail($request->destination_savings_id);
 
+                    if ((float)$sourceSaving->current_balance < ($amount + $fee)) {
+                        throw new \Exception("Saldo rekening {$sourceSaving->name} tidak mencukupi (Sisa: Rp " . number_format($sourceSaving->current_balance, 0, ',', '.') . ", Dibutuhkan: Rp " . number_format($amount + $fee, 0, ',', '.') . ").");
+                    }
+
                     // 1. Transaction Out on Source Account
                     Transaction::create([
                         'user_id' => $userId,
@@ -136,6 +140,10 @@ class TransactionController extends Controller
                 } else {
                     $saving = Saving::where('user_id', $userId)->findOrFail($request->savings_id);
 
+                    if ($request->type !== 'Cash In' && (float)$saving->current_balance < ($amount + $fee)) {
+                        throw new \Exception("Saldo rekening {$saving->name} tidak mencukupi (Sisa: Rp " . number_format($saving->current_balance, 0, ',', '.') . ", Dibutuhkan: Rp " . number_format($amount + $fee, 0, ',', '.') . ").");
+                    }
+
                     Transaction::create([
                         'user_id' => $userId,
                         'savings_id' => $saving->id,
@@ -159,7 +167,7 @@ class TransactionController extends Controller
 
             return redirect()->route('transaction.index')->with('success', 'Transaksi berhasil ditambahkan!');
         } catch (\Exception $e) {
-            return redirect()->route('transaction.index')->with('error', 'Gagal menambahkan transaksi: ' . $e->getMessage());
+            return redirect()->back()->withInput()->with('error', $e->getMessage());
         }
     }
 

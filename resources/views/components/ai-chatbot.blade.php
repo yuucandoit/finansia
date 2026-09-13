@@ -1,15 +1,15 @@
-<div id="ai-chatbot-container" class="fixed bottom-6 right-6 z-50 flex flex-col items-end font-sans">
+<div id="ai-chatbot-container" class="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-50 flex flex-col items-end font-sans max-w-[calc(100vw-24px)]">
 
-    
+    <!-- Chat Window Card -->
     <div id="ai-chatbot-window" 
-         class="hidden w-[360px] sm:w-[390px] bg-white rounded-3xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col transition-all duration-300 transform origin-bottom-right">
+         class="hidden w-[calc(100vw-24px)] sm:w-[390px] max-w-[390px] max-h-[85vh] sm:max-h-[620px] bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col transition-all duration-300 transform origin-bottom-right">
         
-        
-        <div class="bg-[#234066] px-5 py-4 flex items-center justify-between text-white select-none shadow-sm">
+        <!-- Chat Header -->
+        <div class="bg-[#234066] px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between text-white select-none shadow-sm">
             <div class="flex items-center gap-3">
-                
-                <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm flex-shrink-0">
-                    <svg class="w-6 h-6 text-[#234066]" viewBox="0 0 24 24" fill="currentColor">
+                <!-- Bot Avatar Icon -->
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white flex items-center justify-center shadow-sm flex-shrink-0">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-[#234066]" viewBox="0 0 24 24" fill="currentColor">
                         <circle cx="12" cy="4" r="1.5" />
                         <path d="M12 5.5v1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                         <rect x="5" y="7" width="14" height="11" rx="4" />
@@ -18,20 +18,20 @@
                         <circle cx="9" cy="12" r="0.8" fill="#234066" />
                         <circle cx="15" cy="12" r="0.8" fill="#234066" />
                         <path d="M10 15h4" stroke="white" stroke-width="1.5" stroke-linecap="round" />
-                        
+                        <!-- Antenna ears -->
                         <path d="M3.5 11a1.5 1.5 0 0 1 1.5-1.5v5A1.5 1.5 0 0 1 3.5 13v-2zM19 9.5a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5v-5z" />
                     </svg>
                 </div>
                 <div>
-                    <h3 class="font-bold text-base tracking-wide text-white">Asisten AI - Finansia</h3>
-                    <p class="text-[11px] text-blue-200 flex items-center gap-1.5">
+                    <h3 class="font-bold text-sm sm:text-base tracking-wide text-white">Asisten AI - Finansia</h3>
+                    <p class="text-[10px] sm:text-[11px] text-blue-200 flex items-center gap-1.5">
                         <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
                         Online • Siap mencatat
                     </p>
                 </div>
             </div>
 
-            
+            <!-- Header Actions -->
             <button type="button" 
                     onclick="toggleAiChatbot()" 
                     class="text-white/80 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors"
@@ -42,8 +42,8 @@
             </button>
         </div>
 
-        
-        <div id="ai-chat-messages" class="p-4 space-y-4 bg-slate-50/50 max-h-[440px] min-h-[320px] overflow-y-auto scroll-smooth">
+        <!-- Chat Messages Container -->
+        <div id="ai-chat-messages" class="p-3 sm:p-4 space-y-3 sm:space-y-4 bg-slate-50/50 flex-1 max-h-[50vh] sm:max-h-[440px] min-h-[260px] overflow-y-auto scroll-smooth">
             
             
             <div class="flex justify-start gap-2.5 items-start">
@@ -227,21 +227,27 @@
     }
 
     function renderConfirmationCard(data, replyText, container) {
-        const cardId = 'card-' + Date.now();
+        if (replyText) {
+            renderBotTextReply(replyText, container);
+        }
 
+        const cardId = 'card-' + Date.now();
         window.aiPendingTransactions[cardId] = data;
 
+        const isExpense = data.type !== 'Cash In';
         const cardEl = document.createElement('div');
         cardEl.id = cardId;
         cardEl.className = 'bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3';
 
         let savingsOptions = '';
         if (data.available_savings && data.available_savings.length > 0) {
-            savingsOptions = data.available_savings.map(s => 
-                `<option value="${s.id}" ${s.id === data.savings_id ? 'selected' : ''}>${escapeHtml(s.name)}</option>`
-            ).join('');
+            savingsOptions = data.available_savings.map(s => {
+                const balFormatted = s.balance_formatted || ('Rp ' + Number(s.balance || 0).toLocaleString('id-ID'));
+                return `<option value="${s.id}" data-balance="${s.balance || 0}" ${s.id === data.savings_id ? 'selected' : ''}>${escapeHtml(s.name)} (Saldo: ${balFormatted})</option>`;
+            }).join('');
         } else {
-            savingsOptions = `<option value="${data.savings_id}" selected>${escapeHtml(data.account_name)}</option>`;
+            const initialBalFormatted = data.saving_balance_formatted || ('Rp ' + Number(data.saving_balance || 0).toLocaleString('id-ID'));
+            savingsOptions = `<option value="${data.savings_id}" data-balance="${data.saving_balance || 0}" selected>${escapeHtml(data.account_name)} (Saldo: ${initialBalFormatted})</option>`;
         }
 
         let categoryOptions = '';
@@ -253,8 +259,11 @@
             categoryOptions = `<option value="${data.category_id}" selected>${escapeHtml(data.category_name)}</option>`;
         }
 
+        const selectedSaving = (data.available_savings || []).find(s => s.id === data.savings_id);
+        const currentBal = selectedSaving ? Number(selectedSaving.balance) : Number(data.saving_balance || 0);
+        const isInsufficient = isExpense && currentBal < Number(data.amount);
+
         cardEl.innerHTML = `
-            
             <div class="space-y-2.5 text-sm">
                 <div class="flex items-center">
                     <span class="w-24 text-gray-900 font-bold">Jenis:</span>
@@ -290,10 +299,15 @@
                 </div>
             </div>
 
-            
+            <div id="balance-warning-${cardId}" class="${isInsufficient ? 'flex' : 'hidden'} items-start gap-2 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+                <span id="balance-warning-text-${cardId}">Saldo rekening ini (Rp ${currentBal.toLocaleString('id-ID')}) tidak mencukupi untuk transaksi sebesar ${escapeHtml(data.amount_formatted)}.</span>
+            </div>
+
             <hr class="border-gray-200 my-2">
 
-            
             <div id="actions-${cardId}" class="flex items-center gap-2 pt-1">
                 <button type="button" 
                         onclick="cancelTransaction('${cardId}')"
@@ -301,13 +315,47 @@
                     [Batal]
                 </button>
                 <button type="button" 
+                        id="btn-confirm-${cardId}"
                         onclick="confirmAndSaveTransaction('${cardId}')"
-                        class="flex-1 px-4 py-2 bg-[#234066] hover:bg-[#1a304e] text-white text-xs font-semibold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-1.5">
+                        ${isInsufficient ? 'disabled' : ''}
+                        class="flex-1 px-4 py-2 bg-[#234066] hover:bg-[#1a304e] text-white text-xs font-semibold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-1.5 ${isInsufficient ? 'opacity-50 cursor-not-allowed' : ''}">
                     <span>[Konfirmasi & Simpan]</span>
                 </button>
             </div>
         `;
         container.appendChild(cardEl);
+
+        setTimeout(() => {
+            const selSaving = document.getElementById('select-saving-' + cardId);
+            if (selSaving) {
+                selSaving.addEventListener('change', function() {
+                    const selectedOpt = this.options[this.selectedIndex];
+                    const optBal = parseFloat(selectedOpt.getAttribute('data-balance') || '0');
+                    const warnEl = document.getElementById('balance-warning-' + cardId);
+                    const warnTextEl = document.getElementById('balance-warning-text-' + cardId);
+                    const btnConf = document.getElementById('btn-confirm-' + cardId);
+
+                    if (isExpense && optBal < parseFloat(data.amount)) {
+                        if (warnEl) warnEl.classList.remove('hidden');
+                        if (warnEl) warnEl.classList.add('flex');
+                        if (warnTextEl) warnTextEl.textContent = `Saldo rekening ini (Rp ${optBal.toLocaleString('id-ID')}) tidak mencukupi untuk transaksi sebesar ${data.amount_formatted}.`;
+                        if (btnConf) {
+                            btnConf.disabled = true;
+                            btnConf.classList.add('opacity-50', 'cursor-not-allowed');
+                        }
+                    } else {
+                        if (warnEl) {
+                            warnEl.classList.add('hidden');
+                            warnEl.classList.remove('flex');
+                        }
+                        if (btnConf) {
+                            btnConf.disabled = false;
+                            btnConf.classList.remove('opacity-50', 'cursor-not-allowed');
+                        }
+                    }
+                });
+            }
+        }, 50);
     }
 
     function cancelTransaction(cardId) {
@@ -323,7 +371,7 @@
         }
 
         const messageContainer = document.getElementById('ai-chat-messages');
-        renderBotTextReply('Baik, transaksi dibatalkan dan <strong>tidak disimpan</strong> ke database. Ada transaksi lain yang ingin dicatat?', messageContainer);
+        renderBotTextReply('Baik, transaksi dibatalkan dan **tidak disimpan** ke database. Ada transaksi lain yang ingin dicatat?', messageContainer);
         messageContainer.scrollTop = messageContainer.scrollHeight;
     }
 
@@ -336,7 +384,6 @@
             return;
         }
 
-        // Ambil nilai terbaru jika user mengubah dropdown rekening/kategori atau deskripsi
         const descInput = document.getElementById('input-desc-' + cardId);
         const savingSelect = document.getElementById('select-saving-' + cardId);
         const categorySelect = document.getElementById('select-category-' + cardId);
@@ -402,10 +449,27 @@
                     `;
                 }
 
-                const accountName = savingSelect ? savingSelect.options[savingSelect.selectedIndex].text : data.account_name;
-                renderBotSuccessReply(`✅ <strong>Transaksi Berhasil Disimpan!</strong><br>Deskripsi: <strong>${escapeHtml(description)}</strong><br>Nominal: <strong>${data.amount_formatted}</strong> dicatat ke rekening <strong>${escapeHtml(accountName)}</strong>.<br>Saldo baru: <strong>${resData.formatted_balance}</strong>.`, messageContainer);
+                const selectedSavingOption = savingSelect ? savingSelect.options[savingSelect.selectedIndex] : null;
+                const accountName = selectedSavingOption ? selectedSavingOption.text.split(' (Saldo:')[0] : data.account_name;
+                const cleanDesc = escapeHtml(description);
+                const cleanAcc = escapeHtml(accountName);
 
-                // Auto update / reload jika di dashboard
+                const successHtml = `
+                    <div class="font-bold text-emerald-800 flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-600 inline flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                        </svg>
+                        <span>Transaksi Berhasil Disimpan!</span>
+                    </div>
+                    <div class="text-xs text-emerald-900 mt-1.5 space-y-1">
+                        <div><span class="text-emerald-700 font-medium">Deskripsi:</span> <span class="font-bold text-gray-900">${cleanDesc}</span></div>
+                        <div><span class="text-emerald-700 font-medium">Nominal:</span> <span class="font-bold text-emerald-950">${escapeHtml(data.amount_formatted)}</span></div>
+                        <div><span class="text-emerald-700 font-medium">Rekening:</span> <span class="font-bold text-gray-900">${cleanAcc}</span></div>
+                        <div><span class="text-emerald-700 font-medium">Saldo Baru:</span> <span class="font-bold text-emerald-950">${escapeHtml(resData.formatted_balance)}</span></div>
+                    </div>
+                `;
+                renderBotSuccessReply(successHtml, messageContainer);
+
                 setTimeout(() => {
                     if (window.location.pathname.includes('dashboard') || window.location.pathname.includes('transaksi')) {
                         window.location.reload();
@@ -414,13 +478,16 @@
 
             } else {
                 const errorData = await response.json().catch(() => ({}));
+                const errorMsg = errorData.message || 'Terjadi kesalahan saat memproses data.';
+                
                 if (actionsContainer) {
                     actionsContainer.innerHTML = `
-                        <div class="w-full text-center py-1.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700">
-                            Gagal menyimpan: ${escapeHtml(errorData.message || 'Terjadi kesalahan validasi')}
+                        <div class="w-full text-center py-2 px-3 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700">
+                            ✕ ${escapeHtml(errorMsg)}
                         </div>
                     `;
                 }
+                renderBotTextReply(`⚠️ **Peringatan**: ${errorMsg}`, messageContainer);
             }
         } catch (err) {
             if (actionsContainer) {
@@ -435,14 +502,35 @@
         messageContainer.scrollTop = messageContainer.scrollHeight;
     }
 
+    function formatChatText(text) {
+        if (!text) return '';
+        // 1. Amankan karakter berbahaya
+        let res = escapeHtml(text);
+
+        // 2. Decode tag HTML aman yang mungkin dikirim oleh AI / server
+        res = res
+            .replace(/&lt;strong&gt;/gi, '<strong class="font-bold text-gray-900">')
+            .replace(/&lt;\/strong&gt;/gi, '</strong>')
+            .replace(/&lt;b&gt;/gi, '<strong class="font-bold text-gray-900">')
+            .replace(/&lt;\/b&gt;/gi, '</strong>')
+            .replace(/&lt;em&gt;/gi, '<em>')
+            .replace(/&lt;\/em&gt;/gi, '</em>')
+            .replace(/&lt;br\s*\/?&gt;/gi, '<br>');
+
+        // 3. Konversi format markdown **bold** menjadi strong
+        res = res.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gray-900">$1</strong>');
+
+        // 4. Ubah newlines menjadi <br>
+        res = res.replace(/\n/g, '<br>');
+
+        return res;
+    }
+
     function renderBotTextReply(text, container) {
         const replyEl = document.createElement('div');
         replyEl.className = 'flex justify-start gap-2.5 items-start';
 
-        // Format: ubah bold markdown **teks** jadi <strong> dan newlines jadi <br>
-        let formattedText = escapeHtml(text)
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, '<br>');
+        const formattedContent = formatChatText(text);
 
         replyEl.innerHTML = `
             <div class="w-7 h-7 rounded-full bg-[#234066] text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
@@ -452,7 +540,7 @@
                 </svg>
             </div>
             <div class="bg-white text-gray-800 text-sm px-4 py-2.5 rounded-2xl rounded-tl-xs max-w-[85%] border border-gray-200/70 shadow-xs leading-relaxed">
-                ${formattedText}
+                ${formattedContent}
             </div>
         `;
         container.appendChild(replyEl);
@@ -463,11 +551,11 @@
         replyEl.className = 'flex justify-start gap-2.5 items-start';
         replyEl.innerHTML = `
             <div class="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
-                <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                <svg class="w-4 h-4 text-white" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                 </svg>
             </div>
-            <div class="bg-emerald-50/80 text-emerald-900 text-sm px-4 py-3 rounded-2xl rounded-tl-xs max-w-[85%] border border-emerald-200/80 shadow-xs leading-relaxed">
+            <div class="bg-emerald-50/90 text-emerald-950 text-sm px-4 py-3 rounded-2xl rounded-tl-xs max-w-[85%] border border-emerald-200/80 shadow-xs leading-relaxed">
                 ${html}
             </div>
         `;

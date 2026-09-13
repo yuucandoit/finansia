@@ -43,6 +43,7 @@ class UserApprovalController extends Controller
     public function approve(User $user): RedirectResponse
     {
         $user->update(['status' => 'approved']);
+        $user->ensureDefaultCashSaving();
 
         return back()->with('success', "Akun {$user->name} ({$user->email}) berhasil disetujui! Pengguna kini dapat masuk.");
     }

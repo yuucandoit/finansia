@@ -82,4 +82,21 @@ class User extends Authenticatable
     {
         return static::where('status', 'pending')->count();
     }
+
+    public function ensureDefaultCashSaving(): Saving
+    {
+        $cashBank = Bank::firstOrCreate(
+            ['code' => '000'],
+            ['name' => 'Tunai / Cash']
+        );
+
+        return $this->savings()->firstOrCreate(
+            ['account_number' => 'CASH'],
+            [
+                'name' => 'Dompet Tunai (Cash)',
+                'bank_id' => $cashBank->id,
+                'current_balance' => 0,
+            ]
+        );
+    }
 }

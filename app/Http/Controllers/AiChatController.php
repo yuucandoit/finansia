@@ -112,12 +112,19 @@ class AiChatController extends Controller
                 'amount_formatted' => 'Rp ' . number_format($amount, 0, ',', '.'),
                 'savings_id' => $matchedSaving->id,
                 'account_name' => $matchedSaving->name,
+                'saving_balance' => (float) $matchedSaving->current_balance,
+                'saving_balance_formatted' => 'Rp ' . number_format($matchedSaving->current_balance, 0, ',', '.'),
                 'category_id' => $matchedCategory ? $matchedCategory->id : null,
                 'category_name' => $matchedCategory ? $matchedCategory->name : 'Lainnya',
                 'description' => $extracted['description'] ?? $userMessage,
                 'date' => $dateObj->format('Y-m-d'),
                 'date_formatted' => $dateObj->translatedFormat('d M Y'),
-                'available_savings' => $savings->map(fn($s) => ['id' => $s->id, 'name' => $s->name]),
+                'available_savings' => $savings->map(fn($s) => [
+                    'id' => $s->id,
+                    'name' => $s->name,
+                    'balance' => (float) $s->current_balance,
+                    'balance_formatted' => 'Rp ' . number_format($s->current_balance, 0, ',', '.')
+                ]),
                 'available_categories' => $categories->map(fn($c) => ['id' => $c->id, 'name' => $c->name]),
             ];
 
@@ -162,6 +169,14 @@ class AiChatController extends Controller
         $userId = Auth::id();
 
         $saving = Saving::where('user_id', $userId)->findOrFail($validated['savings_id']);
+
+        // Validasi perlindungan saldo minus
+        if ($validated['type'] !== 'Cash In' && (float)$saving->current_balance < (float)$validated['amount']) {
+            return response()->json([
+                'status' => 'error',
+                'message' => "Saldo rekening {$saving->name} tidak mencukupi (Sisa saldo: Rp " . number_format($saving->current_balance, 0, ',', '.') . ", Dibutuhkan: Rp " . number_format($validated['amount'], 0, ',', '.') . "). Transaksi tidak dapat disimpan untuk mencegah saldo minus.",
+            ], 422);
+        }
 
         try {
             DB::transaction(function () use ($userId, $validated, $saving) {

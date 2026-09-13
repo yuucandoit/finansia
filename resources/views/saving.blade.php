@@ -20,12 +20,12 @@
             @endif
 
             <!-- Header -->
-            <div class="flex justify-between items-center mb-6">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
-                    <h1 class="text-3xl font-bold text-gray-800">💰 Tabungan Saya</h1>
-                    <p class="text-gray-500 mt-1">Kelola rekening tabungan Anda</p>
+                    <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">💰 Tabungan Saya</h1>
+                    <p class="text-xs sm:text-sm text-gray-500 mt-1">Kelola rekening tabungan Anda</p>
                 </div>
-                <button onclick="openModalCreate()" class="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all flex items-center gap-2">
+                <button onclick="openModalCreate()" class="w-full sm:w-auto justify-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 transition-all flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
@@ -34,25 +34,25 @@
             </div>
 
             <!-- Total Balance Card -->
-            <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl shadow-2xl p-8 text-white mb-8 relative overflow-hidden">
-                <div class="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32"></div>
-                <div class="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24"></div>
+            <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl p-5 sm:p-8 text-white mb-6 sm:mb-8 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32 pointer-events-none"></div>
+                <div class="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24 pointer-events-none"></div>
                 
                 <div class="relative z-10">
-                    <p class="text-blue-100 text-sm font-medium mb-2">Total Saldo Tabungan</p>
-                    <h2 class="text-5xl font-extrabold mb-4 flex items-center">
-                        <span class="balance-amount">
+                    <p class="text-blue-100 text-xs sm:text-sm font-medium mb-2">Total Saldo Tabungan</p>
+                    <h2 class="text-2xl sm:text-4xl md:text-5xl font-extrabold mb-4 flex items-center flex-wrap gap-2">
+                        <span class="balance-amount break-all">
                                 Rp ••••••••
                         </span>
-                        <span class="showing-btn w-6 h-6 ml-3 text-white/70 cursor-pointer" title="Tampilkan/Sembunyikan Saldo">
+                        <span class="showing-btn w-5 h-5 sm:w-6 sm:h-6 text-white/70 hover:text-white cursor-pointer transition-colors" title="Tampilkan/Sembunyikan Saldo">
                             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M2.42012 12.7132C2.28394 12.4975 2.21584 12.3897 2.17772 12.2234C2.14909 12.0985 2.14909 11.9015 2.17772 11.7766C2.21584 11.6103 2.28394 11.5025 2.42012 11.2868C3.54553 9.50484 6.8954 5 12.0004 5C17.1054 5 20.4553 9.50484 21.5807 11.2868C21.7169 11.5025 21.785 11.6103 21.8231 11.7766C21.8517 11.9015 21.8517 12.0985 21.8231 12.2234C21.785 12.3897 21.7169 12.4975 21.5807 12.7132C20.4553 14.4952 17.1054 19 12.0004 19C6.8954 19 3.54553 14.4952 2.42012 12.7132Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2.42012 12.7132C2.28394 12.4975 2.21584 12.3897 2.17772 12.2234C2.14909 12.0985 2.14909 11.9015 2.17772 11.7766C2.14909 11.6103 2.28394 11.5025 2.42012 11.2868C3.54553 9.50484 6.8954 5 12.0004 5C17.1054 5 20.4553 9.50484 21.5807 11.2868C21.7169 11.5025 21.785 11.6103 21.8231 11.7766C21.8517 11.9015 21.8517 12.0985 21.8231 12.2234C21.785 12.3897 21.7169 12.4975 21.5807 12.7132C20.4553 14.4952 17.1054 19 12.0004 19C6.8954 19 3.54553 14.4952 2.42012 12.7132Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 <path d="M12.0004 15C13.6573 15 15.0004 13.6569 15.0004 12C15.0004 10.3431 13.6573 9 12.0004 9C10.3435 9 9.0004 10.3431 9.0004 12C9.0004 13.6569 10.3435 15 12.0004 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                         </span>
 
                     </h2>
-                    <p class="text-blue-100 text-sm">{{ count($savings) }} Rekening Tabungan Aktif</p>
+                    <p class="text-blue-100 text-xs sm:text-sm">{{ count($savings) }} Rekening Tabungan Aktif</p>
                 </div>
             </div>
 

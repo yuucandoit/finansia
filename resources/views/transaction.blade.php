@@ -38,26 +38,26 @@
             </div>
         @endif
 
-        <div class="p-4 flex flex-col md:flex-row justify-between gap-4">
+        <div class="p-3 sm:p-4 flex flex-col md:flex-row justify-between gap-3 sm:gap-4">
             <!-- Filter Buttons -->
-            <div class="flex space-x-2 overflow-x-auto no-scrollbar pb-2">
+            <div class="flex space-x-2 overflow-x-auto no-scrollbar pb-1 sm:pb-2">
                 <a href="{{ route('transaction.index', array_merge(request()->except('page'), ['type' => null])) }}" 
-                   class="{{ !request('type') ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' }} px-5 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all">
+                   class="{{ !request('type') ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' }} px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all">
                     Semua
                 </a>
                 
                 <a href="{{ route('transaction.index', array_merge(request()->except(['page', 'type']), ['type' => 'Cash In'])) }}" 
-                   class="{{ request('type') == 'Cash In' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' }} px-5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all">
+                   class="{{ request('type') == 'Cash In' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' }} px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all">
                     Pemasukan
                 </a>
                 
                 <a href="{{ route('transaction.index', array_merge(request()->except(['page', 'type']), ['type' => 'Cash Out'])) }}" 
-                   class="{{ request('type') == 'Cash Out' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' }} px-5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all">
+                   class="{{ request('type') == 'Cash Out' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' }} px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all">
                     Pengeluaran
                 </a>
                 
                 <a href="{{ route('transaction.index', array_merge(request()->except(['page', 'type']), ['type' => 'Tabungan'])) }}" 
-                   class="{{ request('type') == 'Tabungan' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' }} px-5 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all">
+                   class="{{ request('type') == 'Tabungan' ? 'bg-blue-600 text-white shadow-md shadow-blue-200' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' }} px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-medium whitespace-nowrap transition-all">
                     Tabungan
                 </a>
             </div>
@@ -68,16 +68,16 @@
                     <input type="hidden" name="type" value="{{ request('type') }}">
                 @endif
                 <input name="search" value="{{ request('search') }}" type="text" placeholder="Cari transaksi..." 
-                       class="border border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none w-full md:w-auto">
-                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-md shadow-blue-200 whitespace-nowrap transition-all">
+                       class="border border-gray-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none flex-1 md:w-auto">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold shadow-md shadow-blue-200 whitespace-nowrap transition-all">
                     Cari
                 </button>
             </form>
         </div>
 
-        <div class="px-4 pb-24">
+        <div class="px-3 sm:px-4 pb-24">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold text-gray-800">Transaksi</h3>
+                <h3 class="text-base sm:text-lg font-bold text-gray-800">Transaksi</h3>
                 <div class="relative">
                     <button onclick="toggleDropdown()" class="text-xs text-blue-600 font-semibold uppercase tracking-wider hover:underline flex items-center gap-1">
                         Lihat Semua
@@ -99,7 +99,7 @@
                         <button onclick="toggleModal('modal-import'); toggleDropdown();" class="w-full text-left px-4 py-3 hover:bg-emerald-50 flex items-center gap-3 transition-colors border-t border-gray-100">
                             <div class="w-8 h-8 bg-emerald-600 text-white rounded-lg flex items-center justify-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                                 </svg>
                             </div>
                             <span class="text-sm font-semibold text-gray-700">Import Transaksi</span>
@@ -109,9 +109,9 @@
             </div>
 
             <!-- Total Cash In & Cash Out Cards -->
-            <div class="grid grid-cols-2 gap-3 mb-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                 <!-- Cash In Card -->
-                <div class="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-100 rounded-2xl p-4 shadow-sm">
+                <div class="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-100 rounded-2xl p-3.5 sm:p-4 shadow-sm">
                     <div class="flex items-center gap-2 mb-2">
                         <div class="w-8 h-8 bg-green-600 text-white rounded-lg flex items-center justify-center">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
@@ -120,14 +120,14 @@
                         </div>
                         <span class="text-xs font-semibold text-green-700 uppercase tracking-wide">Pemasukan</span>
                     </div>
-                    <p class="text-xl font-bold text-green-700 mt-1">
+                    <p class="text-lg sm:text-xl font-bold text-green-700 mt-1 truncate">
                         Rp {{ number_format($totalCashIn ?? 0, 0, ',', '.') }}
                     </p>
                     <p class="text-xs text-green-600 mt-1">Halaman ini</p>
                 </div>
 
                 <!-- Cash Out Card -->
-                <div class="bg-gradient-to-br from-red-50 to-orange-50 border border-red-100 rounded-2xl p-4 shadow-sm">
+                <div class="bg-gradient-to-br from-red-50 to-orange-50 border border-red-100 rounded-2xl p-3.5 sm:p-4 shadow-sm">
                     <div class="flex items-center gap-2 mb-2">
                         <div class="w-8 h-8 bg-red-600 text-white rounded-lg flex items-center justify-center">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
@@ -136,7 +136,7 @@
                         </div>
                         <span class="text-xs font-semibold text-red-700 uppercase tracking-wide">Pengeluaran</span>
                     </div>
-                    <p class="text-xl font-bold text-red-700 mt-1">
+                    <p class="text-lg sm:text-xl font-bold text-red-700 mt-1 truncate">
                         Rp {{ number_format($totalCashOut ?? 0, 0, ',', '.') }}
                     </p>
                     <p class="text-xs text-red-600 mt-1">Halaman ini</p>

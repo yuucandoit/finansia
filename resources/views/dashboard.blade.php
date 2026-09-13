@@ -1,23 +1,23 @@
 <x-app-layout>
-    <div class="py-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="py-4 sm:py-6 bg-gradient-to-br from-gray-50 to-blue-50 min-h-screen">
+        <div class="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8">
             
             <!-- Header Section - Total Balance -->
             <div class="mb-6">
-                <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl shadow-2xl p-8 text-white relative overflow-hidden">
+                <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl sm:rounded-3xl shadow-xl sm:shadow-2xl p-5 sm:p-8 text-white relative overflow-hidden">
                     <!-- Background Pattern -->
-                    <div class="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32"></div>
-                    <div class="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24"></div>
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full -mr-32 -mt-32 pointer-events-none"></div>
+                    <div class="absolute bottom-0 left-0 w-48 h-48 bg-white opacity-5 rounded-full -ml-24 -mb-24 pointer-events-none"></div>
                     
                     <div class="relative z-10">
-                        <div class="flex justify-between items-start mb-4">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6">
                             <div>
-                                <p class="text-blue-100 text-sm font-medium mb-2">Total Saldo</p>
-                                <h2 class="text-4xl font-extrabold tracking-tight flex items-center ">
-                                    <span class="balance-amount">
+                                <p class="text-blue-100 text-xs sm:text-sm font-medium mb-1 sm:mb-2">Total Saldo</p>
+                                <h2 class="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight flex items-center flex-wrap gap-2">
+                                    <span class="balance-amount break-all">
                                          Rp ••••••••
                                     </span>
-                                    <span class="showing-btn w-6 h-6 ml-3 text-white/70 cursor-pointer" title="Tampilkan/Sembunyikan Saldo">
+                                    <span class="showing-btn w-5 h-5 sm:w-6 sm:h-6 text-white/70 hover:text-white cursor-pointer transition-colors" title="Tampilkan/Sembunyikan Saldo">
                                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M2.42012 12.7132C2.28394 12.4975 2.21584 12.3897 2.17772 12.2234C2.14909 12.0985 2.14909 11.9015 2.17772 11.7766C2.21584 11.6103 2.28394 11.5025 2.42012 11.2868C3.54553 9.50484 6.8954 5 12.0004 5C17.1054 5 20.4553 9.50484 21.5807 11.2868C21.7169 11.5025 21.785 11.6103 21.8231 11.7766C21.8517 11.9015 21.8517 12.0985 21.8231 12.2234C21.785 12.3897 21.7169 12.4975 21.5807 12.7132C20.4553 14.4952 17.1054 19 12.0004 19C6.8954 19 3.54553 14.4952 2.42012 12.7132Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                             <path d="M12.0004 15C13.6573 15 15.0004 13.6569 15.0004 12C15.0004 10.3431 13.6573 9 12.0004 9C10.3435 9 9.0004 10.3431 9.0004 12C9.0004 13.6569 10.3435 15 12.0004 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -25,49 +25,49 @@
                                     </span>
                                 </h2>
                             </div>
-                            <div class="flex gap-2">
-                                <a href="{{ route('transaction.index', ['add' => 1]) }}" class="bg-white text-blue-700 hover:bg-blue-50 py-2.5 px-5 rounded-xl font-bold text-sm transition-all duration-200 shadow-lg hover:shadow-xl flex items-center gap-1.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+                            <div class="flex items-center gap-2 w-full sm:w-auto">
+                                <a href="{{ route('transaction.index', ['add' => 1]) }}" class="flex-1 sm:flex-none justify-center bg-white text-blue-700 hover:bg-blue-50 py-2 sm:py-2.5 px-3.5 sm:px-5 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 shadow-md hover:shadow-xl flex items-center gap-1.5 whitespace-nowrap">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4 sm:w-5 sm:h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                     </svg>
                                     Tambah Transaksi
                                 </a>
-                                <button onclick="window.location.reload()" class="bg-white/20 backdrop-blur-sm hover:bg-white/30 border border-white/30 text-white py-2.5 px-5 rounded-xl font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 inline mr-1">
+                                <button onclick="window.location.reload()" class="bg-white/20 backdrop-blur-sm hover:bg-white/30 border border-white/30 text-white py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-200 shadow-md hover:shadow-xl flex items-center justify-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 sm:w-5 sm:h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                                     </svg>
-                                    Refresh
+                                    <span class="hidden xs:inline sm:inline">Refresh</span>
                                 </button>
                             </div>
                         </div>
                         
-                        <div class="grid grid-cols-2 gap-4 mt-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4 sm:mt-6">
                             <!-- Cash In Card -->
-                            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+                            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-3.5 sm:p-4 border border-white/20">
                                 <div class="flex items-center gap-3">
-                                    <div class="w-12 h-12 bg-green-400/30 rounded-xl flex items-center justify-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6 text-green-300">
+                                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-green-400/30 rounded-xl flex items-center justify-center flex-shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5 sm:w-6 sm:h-6 text-green-300">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                                         </svg>
                                     </div>
-                                    <div>
-                                        <p class="text-blue-100 text-xs font-medium">Pemasukan Bulan Ini</p>
-                                        <p class="text-white font-bold text-lg mt-0.5">Rp {{ number_format($cashInThisMonth ?? 0, 0, ',', '.') }}</p>
+                                    <div class="min-w-0">
+                                        <p class="text-blue-100 text-[11px] sm:text-xs font-medium">Pemasukan Bulan Ini</p>
+                                        <p class="text-white font-bold text-base sm:text-lg mt-0.5 truncate">Rp {{ number_format($cashInThisMonth ?? 0, 0, ',', '.') }}</p>
                                     </div>
                                 </div>
                             </div>
                             
                             <!-- Cash Out Card -->
-                            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+                            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-3.5 sm:p-4 border border-white/20">
                                 <div class="flex items-center gap-3">
-                                    <div class="w-12 h-12 bg-red-400/30 rounded-xl flex items-center justify-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-6 h-6 text-red-300">
+                                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-red-400/30 rounded-xl flex items-center justify-center flex-shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5 sm:w-6 sm:h-6 text-red-300">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6L9 12.75l4.286-4.286a11.948 11.948 0 014.306 6.43l.776 2.898m0 0l3.182-5.511m-3.182 5.51l-5.511-3.181" />
                                         </svg>
                                     </div>
-                                    <div>
-                                        <p class="text-blue-100 text-xs font-medium">Pengeluaran Bulan Ini</p>
-                                        <p class="text-white font-bold text-lg mt-0.5">Rp {{ number_format($cashOutThisMonth ?? 0, 0, ',', '.') }}</p>
+                                    <div class="min-w-0">
+                                        <p class="text-blue-100 text-[11px] sm:text-xs font-medium">Pengeluaran Bulan Ini</p>
+                                        <p class="text-white font-bold text-base sm:text-lg mt-0.5 truncate">Rp {{ number_format($cashOutThisMonth ?? 0, 0, ',', '.') }}</p>
                                     </div>
                                 </div>
                             </div>
@@ -77,57 +77,57 @@
             </div>
 
             <!-- Charts Grid -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
                 
                 <!-- Cash Flow Chart (Bar) -->
-                <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
-                    <div class="flex justify-between items-center mb-6">
+                <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 sm:mb-6">
                         <div>
-                            <h3 class="text-lg font-bold text-gray-800">Cash Flow</h3>
-                            <p class="text-sm text-gray-500">7 Hari Terakhir</p>
+                            <h3 class="text-base sm:text-lg font-bold text-gray-800">Cash Flow</h3>
+                            <p class="text-xs sm:text-sm text-gray-500">7 Hari Terakhir</p>
                         </div>
                         <div class="flex gap-4">
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5">
                                 <div class="w-3 h-3 bg-green-500 rounded"></div>
                                 <span class="text-xs font-medium text-gray-600">Cash In</span>
                             </div>
-                            <div class="flex items-center gap-2">
+                            <div class="flex items-center gap-1.5">
                                 <div class="w-3 h-3 bg-red-500 rounded"></div>
                                 <span class="text-xs font-medium text-gray-600">Cash Out</span>
                             </div>
                         </div>
                     </div>
-                    <div class="h-72">
+                    <div class="h-60 sm:h-72 relative w-full overflow-hidden">
                         <canvas id="cashFlowChart"></canvas>
                     </div>
                 </div>
 
                 <!-- Expense Categories Chart (Donut) -->
-                <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
-                    <div class="mb-6">
-                        <h3 class="text-lg font-bold text-gray-800">Kategori Pengeluaran</h3>
-                        <p class="text-sm text-gray-500">Top 5 Bulan Ini</p>
+                <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100">
+                    <div class="mb-4 sm:mb-6">
+                        <h3 class="text-base sm:text-lg font-bold text-gray-800">Kategori Pengeluaran</h3>
+                        <p class="text-xs sm:text-sm text-gray-500">Top 5 Bulan Ini</p>
                     </div>
-                    <div class="h-72 flex items-center justify-center">
+                    <div class="h-60 sm:h-72 flex items-center justify-center relative w-full overflow-hidden">
                         <canvas id="expenseDonutChart"></canvas>
                     </div>
                 </div>
             </div>
 
             <!-- Balance Trend Chart (Line) -->
-            <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100 mb-6">
-                <div class="flex justify-between items-center mb-6">
+            <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100 mb-6">
+                <div class="flex justify-between items-center mb-4 sm:mb-6">
                     <div>
-                        <h3 class="text-lg font-bold text-gray-800">Trend Saldo</h3>
-                        <p class="text-sm text-gray-500">30 Hari Terakhir</p>
+                        <h3 class="text-base sm:text-lg font-bold text-gray-800">Trend Saldo</h3>
+                        <p class="text-xs sm:text-sm text-gray-500">30 Hari Terakhir</p>
                     </div>
-                    <span class="text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg font-semibold">
+                    <span class="text-xs bg-blue-50 text-blue-700 px-2.5 sm:px-3 py-1.5 rounded-lg font-semibold">
                         @if(count($balanceTrend) >= 2)
                             @php
                                 $trend = end($balanceTrend) - reset($balanceTrend);
                                 $isPositive = $trend >= 0;
                             @endphp
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4 inline {{ $isPositive ? 'text-green-600' : 'text-red-600' }}">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5 sm:w-4 sm:h-4 inline {{ $isPositive ? 'text-green-600' : 'text-red-600' }}">
                                 @if($isPositive)
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18" />
                                 @else
@@ -140,16 +140,16 @@
                         @endif
                     </span>
                 </div>
-                <div class="h-80">
+                <div class="h-64 sm:h-80 relative w-full overflow-hidden">
                     <canvas id="balanceTrendChart"></canvas>
                 </div>
             </div>
 
             <!-- Recent Transactions -->
             <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-                <div class="flex justify-between items-center p-6 border-b border-gray-100">
-                    <h3 class="text-lg font-bold text-gray-800">Transaksi Terakhir</h3>
-                    <a href="{{ route('transaction.index') }}" class="text-sm text-blue-600 hover:text-blue-700 font-semibold hover:underline">
+                <div class="flex justify-between items-center p-4 sm:p-6 border-b border-gray-100">
+                    <h3 class="text-base sm:text-lg font-bold text-gray-800">Transaksi Terakhir</h3>
+                    <a href="{{ route('transaction.index') }}" class="text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-semibold hover:underline">
                         Lihat Semua →
                     </a>
                 </div>
@@ -159,11 +159,11 @@
                         @php
                             $isCashIn = $transaction->type == 'Cash In';
                         @endphp
-                        <div class="p-4 hover:bg-gray-50 transition-colors">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-4 flex-1 min-w-0">
-                                    <div class="flex-shrink-0 w-12 h-12 {{ $isCashIn ? 'bg-green-100' : 'bg-red-100' }} rounded-xl flex items-center justify-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 {{ $isCashIn ? 'text-green-600' : 'text-red-600' }}">
+                        <div class="p-3.5 sm:p-4 hover:bg-gray-50 transition-colors">
+                            <div class="flex items-center justify-between gap-3">
+                                <div class="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                                    <div class="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 {{ $isCashIn ? 'bg-green-100' : 'bg-red-100' }} rounded-xl flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 sm:w-6 sm:h-6 {{ $isCashIn ? 'text-green-600' : 'text-red-600' }}">
                                             @if($isCashIn)
                                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                             @else
@@ -172,14 +172,14 @@
                                         </svg>
                                     </div>
                                     <div class="flex-1 min-w-0">
-                                        <h4 class="font-bold text-gray-800 truncate">{{ $transaction->description }}</h4>
-                                        <p class="text-xs text-gray-500">
+                                        <h4 class="font-bold text-gray-800 text-sm sm:text-base truncate">{{ $transaction->description }}</h4>
+                                        <p class="text-[11px] sm:text-xs text-gray-500 truncate">
                                             {{ $transaction->type }} • {{ $transaction->created_at->format('d M Y, H:i') }}
                                         </p>
                                     </div>
                                 </div>
-                                <div class="flex-shrink-0 ml-4">
-                                    <p class="font-bold text-lg {{ $isCashIn ? 'text-green-600' : 'text-red-600' }}">
+                                <div class="flex-shrink-0 text-right">
+                                    <p class="font-bold text-sm sm:text-base md:text-lg whitespace-nowrap {{ $isCashIn ? 'text-green-600' : 'text-red-600' }}">
                                         {{ $isCashIn ? '+' : '-' }} Rp {{ number_format($transaction->amount, 0, ',', '.') }}
                                     </p>
                                 </div>

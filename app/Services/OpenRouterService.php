@@ -246,12 +246,12 @@ PROMPT;
                 'bca' => 'BCA', 'mandiri' => 'Mandiri', 'bri' => 'BRI',
                 'bni' => 'BNI', 'gopay' => 'GoPay', 'ovo' => 'OVO',
                 'dana' => 'Dana', 'shopeepay' => 'ShopeePay', 'jago' => 'Jago',
-                'tunai' => 'Tunai', 'cash' => 'Tunai'
+                'cash' => 'Cash', 'tunai' => 'Tunai', 'uang tunai' => 'Tunai', 'dompet' => 'Cash'
             ];
             foreach ($bankKeywords as $k => $bName) {
                 if (str_contains($lowerMsg, $k)) {
                     foreach ($userAccounts as $acc) {
-                        if (stripos($acc, $bName) !== false) {
+                        if (stripos($acc, $bName) !== false || ($bName === 'Cash' && stripos($acc, 'Tunai') !== false) || ($bName === 'Tunai' && stripos($acc, 'Cash') !== false)) {
                             $matchedAccount = $acc;
                             break 2;
                         }
