@@ -7,6 +7,7 @@ use App\Models\Saving;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class SavingController extends Controller
 {
@@ -85,9 +86,18 @@ class SavingController extends Controller
         // dd($transaction);
         $saving = Saving::where('user_id', Auth::id())
             ->find($id);
+
+        if (!$saving) {
+            abort(404);
+        }
+
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $yearExtract = $isSqlite ? "CAST(strftime('%Y', transaction_date) AS INTEGER)" : "EXTRACT(YEAR FROM transaction_date)";
+        $monthExtract = $isSqlite ? "CAST(strftime('%m', transaction_date) AS INTEGER)" : "EXTRACT(MONTH FROM transaction_date)";
+
         $transaction_query = $saving->transaction();
         $years = $saving->transaction()
-            ->selectRaw('EXTRACT(YEAR FROM transaction_date) as year')
+            ->selectRaw("{$yearExtract} as year")
             ->distinct()
             ->orderBy('year', 'desc')
             ->pluck('year');
@@ -105,7 +115,7 @@ class SavingController extends Controller
             ->sum('amount');
 
         $income_vs_spending = (clone $transaction_query)
-            ->selectRaw("EXTRACT(MONTH FROM transaction_date) as month, 
+            ->selectRaw("{$monthExtract} as month, 
                     SUM(CASE WHEN type = 'Cash In' THEN amount ELSE 0 END) as income,
                     SUM(CASE WHEN type = 'Cash Out' THEN amount ELSE 0 END) as spending")
             ->whereYear('transaction_date', $year)
@@ -133,10 +143,14 @@ class SavingController extends Controller
     {
         $year = $request->year ?? date('Y');
         
+        $isSqlite = DB::connection()->getDriverName() === 'sqlite';
+        $monthExtract = $isSqlite ? "CAST(strftime('%m', transaction_date) AS INTEGER)" : "EXTRACT(MONTH FROM transaction_date)";
+        $monthNameSql = $isSqlite ? "strftime('%m', transaction_date)" : "TO_CHAR(transaction_date, 'Month')";
+
         $months = Transaction::where('savings_id', $id)
             ->whereYear('transaction_date', $year)
-            ->selectRaw("EXTRACT(MONTH FROM transaction_date) as month_num, 
-                        TO_CHAR(transaction_date, 'Month') as month_name,
+            ->selectRaw("{$monthExtract} as month_num, 
+                        {$monthNameSql} as month_name,
                         COUNT(*) as total_count")
             ->groupBy('month_num', 'month_name')
             ->orderBy('month_num', 'desc')

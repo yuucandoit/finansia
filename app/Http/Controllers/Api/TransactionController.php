@@ -1,0 +1,311 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Category;
+use App\Models\Saving;
+use App\Models\Transaction;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class TransactionController extends Controller
+{
+    use ApiResponse;
+
+    /**
+     * Menampilkan daftar transaksi dengan filter dan pagination.
+     */
+    public function index(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+        $perPage = (int) $request->query('per_page', 15);
+
+        $query = Transaction::with(['category', 'savingAccount'])
+            ->where('user_id', $userId);
+
+        // Filter: Tipe Transaksi
+        if ($request->filled('type')) {
+            $query->where('type', $request->query('type'));
+        }
+
+        // Filter: Pencarian Deskripsi
+        if ($request->filled('search')) {
+            $search = $request->query('search');
+            $query->where('description', 'like', "%{$search}%");
+        }
+
+        // Filter: Rekening Tertentu
+        if ($request->filled('savings_id')) {
+            $query->where('savings_id', $request->query('savings_id'));
+        }
+
+        // Filter: Kategori Tertentu
+        if ($request->filled('category_id')) {
+            $query->where('category_id', $request->query('category_id'));
+        }
+
+        // Filter: Rentang Tanggal
+        if ($request->filled('start_date') && $request->filled('end_date')) {
+            $query->whereBetween('transaction_date', [
+                Carbon::parse($request->query('start_date'))->startOfDay(),
+                Carbon::parse($request->query('end_date'))->endOfDay(),
+            ]);
+        }
+
+        // Hitung total ringkasan dari query yang difilter
+        $totalCashIn = (float) (clone $query)->where('type', 'Cash In')->sum('amount');
+        $totalCashOut = (float) (clone $query)->whereIn('type', ['Cash Out', 'Transfer', 'Tabungan'])->sum('amount');
+
+        $paginated = $query->orderBy('transaction_date', 'DESC')
+            ->orderBy('id', 'DESC')
+            ->paginate($perPage);
+
+        $items = collect($paginated->items())->map(function ($item) {
+            return [
+                'id'                      => $item->id,
+                'type'                    => $item->type,
+                'amount'                  => (float) $item->amount,
+                'amount_formatted'        => 'Rp ' . number_format($item->amount, 0, ',', '.'),
+                'fee'                     => $item->fee ? (float) $item->fee : null,
+                'fee_formatted'           => $item->fee ? 'Rp ' . number_format($item->fee, 0, ',', '.') : null,
+                'description'             => $item->description,
+                'transaction_date'        => $item->transaction_date ? Carbon::parse($item->transaction_date)->toIso8601String() : null,
+                'transaction_date_formatted' => $item->transaction_date ? Carbon::parse($item->transaction_date)->translatedFormat('d M Y, H:i') : null,
+                'is_manual'               => (bool) $item->is_manual,
+                'category'                => $item->category ? [
+                    'id'    => $item->category->id,
+                    'name'  => $item->category->name,
+                    'color' => $item->category->color,
+                ] : null,
+                'saving_account'          => $item->savingAccount ? [
+                    'id'   => $item->savingAccount->id,
+                    'name' => $item->savingAccount->name,
+                ] : null,
+            ];
+        });
+
+        return $this->successResponse([
+            'summary' => [
+                'total_cash_in'           => $totalCashIn,
+                'total_cash_in_formatted' => 'Rp ' . number_format($totalCashIn, 0, ',', '.'),
+                'total_cash_out'          => $totalCashOut,
+                'total_cash_out_formatted'=> 'Rp ' . number_format($totalCashOut, 0, ',', '.'),
+            ],
+            'transactions' => $items,
+            'pagination'   => [
+                'current_page' => $paginated->currentPage(),
+                'last_page'    => $paginated->lastPage(),
+                'per_page'     => $paginated->perPage(),
+                'total'        => $paginated->total(),
+            ],
+        ], 'Daftar transaksi berhasil diambil.');
+    }
+
+    /**
+     * Menyimpan transaksi baru (dengan validasi saldo minus / anti-overdraft).
+     */
+    public function store(Request $request): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $validated = $request->validate([
+            'description'            => ['required', 'string', 'max:255'],
+            'type'                   => ['required', 'in:Cash In,Cash Out,Transfer,Tabungan'],
+            'amount'                 => ['required', 'numeric', 'min:1'],
+            'savings_id'             => ['required', 'exists:savings,id'],
+            'destination_savings_id' => ['nullable', 'exists:savings,id'],
+            'category_id'            => ['nullable', 'exists:categories,id'],
+            'fee'                    => ['nullable', 'numeric', 'min:0'],
+            'transaction_date'       => ['nullable', 'date'],
+        ]);
+
+        $amount = (float) $validated['amount'];
+        $fee = (float) ($validated['fee'] ?? 0);
+        $date = $validated['transaction_date'] ?? now();
+        $categoryId = $validated['category_id'] ?? null;
+
+        try {
+            $transaction = DB::transaction(function () use ($userId, $validated, $amount, $fee, $date, $categoryId) {
+
+                // Skenario 1: Transfer atau Tabungan ke rekening tujuan
+                if ($validated['type'] === 'Transfer' || ($validated['type'] === 'Tabungan' && !empty($validated['destination_savings_id']))) {
+                    $sourceSaving = Saving::where('user_id', $userId)->findOrFail($validated['savings_id']);
+                    $destSaving = Saving::where('user_id', $userId)->findOrFail($validated['destination_savings_id']);
+
+                    // Validasi perlindungan saldo minus
+                    if ((float) $sourceSaving->current_balance < ($amount + $fee)) {
+                        throw new \Exception(
+                            "Saldo rekening {$sourceSaving->name} tidak mencukupi (Sisa: Rp " . number_format($sourceSaving->current_balance, 0, ',', '.') . ", Dibutuhkan: Rp " . number_format($amount + $fee, 0, ',', '.') . ")."
+                        );
+                    }
+
+                    // 1. Catat transaksi keluar di rekening asal
+                    $txOut = Transaction::create([
+                        'user_id'          => $userId,
+                        'savings_id'       => $sourceSaving->id,
+                        'category_id'      => $categoryId,
+                        'type'             => $validated['type'],
+                        'description'      => $validated['description'] . ' (ke ' . $destSaving->name . ')',
+                        'amount'           => $amount,
+                        'fee'              => $fee > 0 ? $fee : null,
+                        'transaction_date' => $date,
+                        'is_manual'        => true,
+                    ]);
+
+                    $sourceSaving->decrement('current_balance', $amount + $fee);
+
+                    // 2. Catat transaksi masuk di rekening tujuan
+                    Transaction::create([
+                        'user_id'          => $userId,
+                        'savings_id'       => $destSaving->id,
+                        'category_id'      => $categoryId,
+                        'type'             => $validated['type'],
+                        'description'      => $validated['description'] . ' (dari ' . $sourceSaving->name . ')',
+                        'amount'           => $amount,
+                        'fee'              => null,
+                        'transaction_date' => $date,
+                        'is_manual'        => true,
+                    ]);
+
+                    $destSaving->increment('current_balance', $amount);
+
+                    return $txOut;
+                }
+
+                // Skenario 2: Transaksi reguler (Cash In atau Cash Out)
+                $saving = Saving::where('user_id', $userId)->findOrFail($validated['savings_id']);
+
+                // Validasi saldo minus untuk pengeluaran
+                if ($validated['type'] !== 'Cash In' && (float) $saving->current_balance < ($amount + $fee)) {
+                    throw new \Exception(
+                        "Saldo rekening {$saving->name} tidak mencukupi (Sisa: Rp " . number_format($saving->current_balance, 0, ',', '.') . ", Dibutuhkan: Rp " . number_format($amount + $fee, 0, ',', '.') . ")."
+                    );
+                }
+
+                $tx = Transaction::create([
+                    'user_id'          => $userId,
+                    'savings_id'       => $saving->id,
+                    'category_id'      => $categoryId,
+                    'type'             => $validated['type'],
+                    'description'      => $validated['description'],
+                    'amount'           => $amount,
+                    'fee'              => $fee > 0 ? $fee : null,
+                    'transaction_date' => $date,
+                    'is_manual'        => true,
+                ]);
+
+                if ($validated['type'] === 'Cash In') {
+                    $saving->increment('current_balance', $amount);
+                } else {
+                    $saving->decrement('current_balance', $amount + $fee);
+                }
+
+                return $tx;
+            });
+
+            return $this->successResponse([
+                'id'               => $transaction->id,
+                'description'      => $transaction->description,
+                'type'             => $transaction->type,
+                'amount'           => (float) $transaction->amount,
+                'amount_formatted' => 'Rp ' . number_format($transaction->amount, 0, ',', '.'),
+            ], 'Transaksi berhasil ditambahkan!', 201);
+
+        } catch (\Exception $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        }
+    }
+
+    /**
+     * Menampilkan detail satu transaksi.
+     */
+    public function show(Request $request, $id): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $tx = Transaction::with(['category', 'savingAccount'])
+            ->where('user_id', $userId)
+            ->find($id);
+
+        if (!$tx) {
+            return $this->errorResponse('Transaksi tidak ditemukan.', 404);
+        }
+
+        return $this->successResponse([
+            'id'                      => $tx->id,
+            'type'                    => $tx->type,
+            'amount'                  => (float) $tx->amount,
+            'amount_formatted'        => 'Rp ' . number_format($tx->amount, 0, ',', '.'),
+            'fee'                     => $tx->fee ? (float) $tx->fee : null,
+            'fee_formatted'           => $tx->fee ? 'Rp ' . number_format($tx->fee, 0, ',', '.') : null,
+            'description'             => $tx->description,
+            'transaction_date'        => $tx->transaction_date ? Carbon::parse($tx->transaction_date)->toIso8601String() : null,
+            'transaction_date_formatted' => $tx->transaction_date ? Carbon::parse($tx->transaction_date)->translatedFormat('d F Y, H:i') : null,
+            'category'                => $tx->category ? [
+                'id'    => $tx->category->id,
+                'name'  => $tx->category->name,
+                'color' => $tx->category->color,
+            ] : null,
+            'saving_account'          => $tx->savingAccount ? [
+                'id'   => $tx->savingAccount->id,
+                'name' => $tx->savingAccount->name,
+            ] : null,
+        ], 'Detail transaksi berhasil diambil.');
+    }
+
+    /**
+     * Menghapus transaksi dan otomatis me-rollback saldo rekening.
+     */
+    public function destroy(Request $request, $id): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $tx = Transaction::where('user_id', $userId)->find($id);
+
+        if (!$tx) {
+            return $this->errorResponse('Transaksi tidak ditemukan.', 404);
+        }
+
+        try {
+            DB::transaction(function () use ($tx) {
+                $saving = Saving::find($tx->savings_id);
+                $amount = (float) $tx->amount;
+                $fee = (float) ($tx->fee ?? 0);
+
+                if ($saving) {
+                    if ($tx->type === 'Cash In') {
+                        // Rollback Cash In: kurangi saldo
+                        $saving->decrement('current_balance', $amount);
+                    } else {
+                        // Rollback Cash Out / Tabungan / Transfer: kembalikan saldo
+                        $saving->increment('current_balance', $amount + $fee);
+                    }
+                }
+
+                $tx->delete();
+            });
+
+            return $this->successResponse(null, 'Transaksi berhasil dihapus dan saldo telah disesuaikan kembali.');
+        } catch (\Exception $e) {
+            return $this->errorResponse('Gagal menghapus transaksi: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Mengambil daftar kategori transaksi untuk mobile apps.
+     */
+    public function categories(Request $request): JsonResponse
+    {
+        $userId = $request->user()?->id;
+        $query = Category::query();
+        if ($userId) {
+            $query->forUser($userId);
+        }
+        $categories = $query->orderBy('name', 'ASC')->get(['id', 'name', 'color', 'icon', 'type']);
+
+        return $this->successResponse($categories, 'Daftar kategori berhasil diambil.');
+    }
+}

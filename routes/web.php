@@ -5,6 +5,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SavingController;
 use App\Http\Controllers\TransactionController;
 use App\Http\Controllers\AiChatController;
+use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\Admin\UserApprovalController;
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +32,13 @@ Route::prefix('saving')->group(function () {
     Route::get('/detail/{id}',[SavingController::class,'detail'])->name('saving.detail');
 })->middleware(['auth', 'verified']);
 
+Route::prefix('anggaran')->middleware(['auth', 'verified'])->group(function () {
+    Route::get('/', [BudgetController::class, 'index'])->name('budget.index');
+    Route::post('/store', [BudgetController::class, 'store'])->name('budget.store');
+    Route::put('/{budget}', [BudgetController::class, 'update'])->name('budget.update');
+    Route::delete('/{budget}', [BudgetController::class, 'destroy'])->name('budget.destroy');
+});
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -40,6 +48,7 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'verified'])->prefix('ai-chat')->group(function () {
     Route::post('/parse', [AiChatController::class, 'parse'])->name('ai.parse');
     Route::post('/save', [AiChatController::class, 'save'])->name('ai.save');
+    Route::post('/save-budget', [AiChatController::class, 'saveBudget'])->name('ai.save_budget');
 });
 
 Route::middleware(['auth', 'verified', 'master_mind'])->prefix('admin/user-approvals')->name('admin.approvals.')->group(function () {

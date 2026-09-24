@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -19,42 +20,59 @@ class OpenRouterService
     }
 
     /**
-     * Menganalisis pesan pengguna untuk mengekstrak intent dan data transaksi.
+     * Menganalisis pesan pengguna untuk mengekstrak intent dan data (transaksi atau anggaran, single maupun multiple).
      */
     public function parseMessage(string $userMessage, array $userAccounts = [], array $userCategories = []): array
     {
         $accountsList = implode(', ', $userAccounts) ?: 'Tunai, Rekening Utama';
         $categoriesList = implode(', ', $userCategories) ?: 'Makanan & Minuman, Transportasi, Belanja, Tagihan, Lain-lain';
         $currentDate = now()->format('Y-m-d');
+        $currentMonth = (int) now()->month;
+        $currentYear = (int) now()->year;
 
         $systemPrompt = <<<PROMPT
-Anda adalah asisten keuangan pribadi cerdas untuk aplikasi Finansia.
-Tugas Anda mengidentifikasi maksud (intent) pengguna dan mengekstrak informasi transaksi jika ada.
+ Anda adalah asisten keuangan pribadi cerdas untuk aplikasi Finansia.
+Tugas Anda mengidentifikasi maksud (intent) pengguna dan mengekstrak informasi keuangan.
+Pengguna dapat mencatat SATU atau BEBERAPA (MULTIPLE) transaksi cashflow maupun anggaran bulanan per kebutuhan sekaligus dalam satu pesan!
 
 Konteks pengguna:
 - Tanggal hari ini: {$currentDate}
+- Bulan/Tahun saat ini: {$currentMonth}/{$currentYear}
 - Daftar Rekening/Dompet yang tersedia: [{$accountsList}]
-- Daftar Kategori yang tersedia: [{$categoriesList}]
+- Daftar Kategori/Kebutuhan yang tersedia: [{$categoriesList}]
 
 Aturan Wajib:
 1. Kembalikan HANYA format JSON valid tanpa tanda markdown (tanpa ```json ... ```), tanpa teks pengantar.
 2. Skema JSON:
 {
-  "intent": "RECORD_TRANSACTION" | "FINANCIAL_QUERY" | "GENERAL_CHAT",
+  "intent": "RECORD_TRANSACTION" | "RECORD_BUDGET" | "FINANCIAL_QUERY" | "GENERAL_CHAT",
   "data": {
-    "type": "cash_out" | "cash_in" | "transfer",
-    "amount": integer_nominal,
-    "account_name": "string (sesuaikan paling mirip dari daftar rekening)",
-    "category": "string (sesuaikan paling mirip dari daftar kategori)",
-    "description": "string (buatkan deskripsi transaksi yang ringkas dan jelas, contoh: 'Beli Kopi', 'Makan Ramen', 'Gaji Masuk')",
-    "date": "YYYY-MM-DD"
+    "items": [
+      // Jika RECORD_TRANSACTION:
+      {
+        "type": "cash_out" | "cash_in" | "transfer",
+        "amount": integer_nominal,
+        "account_name": "string (sesuaikan paling mirip dari daftar rekening)",
+        "category": "string (sesuaikan paling mirip dari daftar kategori)",
+        "description": "string (deskripsi ringkas transaksi, contoh: 'Beli Kopi', 'Makan Ramen', 'Bensin')",
+        "date": "YYYY-MM-DD"
+      }
+      // ATAU Jika RECORD_BUDGET:
+      {
+        "category": "string (nama kebutuhan/kategori, sesuaikan dari daftar kategori atau jika user menyebut kebutuhan spesifik baru seperti Kos, Sedekah, Gym, Skincare, Cicilan Motor dll., gunakan nama kebutuhan tersebut)",
+        "amount": integer_nominal,
+        "month": integer_bulan (1-12, default {$currentMonth}),
+        "year": integer_tahun (default {$currentYear})
+      }
+    ]
   } | null,
   "reply": "string (pesan balasan singkat dan ramah)"
 }
 
 3. Skema Intent:
-- "RECORD_TRANSACTION": Jika user ingin mencatat pemasukan/pengeluaran/transfer (contoh: "makan ramen 45rb", "beli kopi 25k pake bca", "gaji masuk 5jt"). Set data dengan rincian transaksi.
-- "FINANCIAL_QUERY": Jika user bertanya tentang saldo, pengeluaran, sisa kas, perbandingan kategori, atau kondisi uangnya (contoh: "bulan ini jajan makan udah habis berapa?", "sisa saldo berapa?", "pengeluaran terbesar apa?"). Set "data": null.
+- "RECORD_TRANSACTION": Jika user ingin mencatat 1 atau lebih transaksi cashflow (contoh: "makan ramen 45rb", "beli kopi 25k dan bensin 30k pake bca", "gaji masuk 5jt"). Isi "data.items" dengan array transaksi.
+- "RECORD_BUDGET": Jika user ingin menetapkan/mengatur/mencatat 1 atau lebih batas anggaran bulanan per kebutuhan (contoh: "atur anggaran makan 1.5jt", "catat budget bayar kos 1.5jt dan sedekah 200rb", "anggaran skincare 300rb", "pasang batas pengeluaran jajan 200rb"). Setiap kebutuhan yang disebutkan dicatat sebagai kategori anggarannya. Isi "data.items" dengan array objek anggaran.
+- "FINANCIAL_QUERY": Jika user bertanya tentang saldo, pengeluaran, sisa kas, perbandingan kategori, ATAU status anggaran bulanan (contoh: "bulan ini jajan makan udah habis berapa?", "sisa saldo berapa?", "apakah budget makan masih aman?"). Set "data": null.
 - "GENERAL_CHAT": Jika sekadar menyapa atau ngobrol umum di luar niat catat atau tanya data keuangan (contoh: "halo", "apa kabar", "siapa kamu"). Set "data": null.
 PROMPT;
 
@@ -69,7 +87,15 @@ PROMPT;
 
             if ($response && !isset($response['error'])) {
                 $parsed = $this->cleanAndParseJson($response);
-                if (!empty($parsed) && in_array($parsed['intent'] ?? '', ['RECORD_TRANSACTION', 'FINANCIAL_QUERY', 'GENERAL_CHAT'])) {
+                if (!empty($parsed) && in_array($parsed['intent'] ?? '', ['RECORD_TRANSACTION', 'RECORD_BUDGET', 'FINANCIAL_QUERY', 'GENERAL_CHAT'])) {
+                    // Normalisasi struktur items jika model mengembalikan flat data
+                    if (isset($parsed['data']) && is_array($parsed['data'])) {
+                        if (!isset($parsed['data']['items'])) {
+                            if (isset($parsed['data']['amount'])) {
+                                $parsed['data']['items'] = [$parsed['data']];
+                            }
+                        }
+                    }
                     return $parsed;
                 }
             }
@@ -89,13 +115,13 @@ PROMPT;
 
         $systemPrompt = <<<PROMPT
 Anda adalah asisten keuangan pribadi cerdas untuk Finansia.
-Jawab pertanyaan pengguna HANYA berdasarkan snapshot data keuangan berikut:
+Jawab pertanyaan pengguna HANYA berdasarkan snapshot data keuangan berikut (termasuk saldo, cash flow, dan anggaran bulanan jika ada):
 {$snapshotJson}
 
 Aturan Menjawab:
 1. Jawab santai, ramah, to-the-point, dan gunakan format nominal Rupiah yang rapi (contoh: Rp 45.000, Rp 1.500.000).
 2. Jangan pernah mengarang angka. Jika data yang ditanya tidak ada di snapshot, jawab jujur bahwa datanya belum tercatat.
-3. Berikan insight singkat jika relevan (misalnya mengingatkan pengeluaran terbesar atau sisa kas bulan ini).
+3. Jika ditanya tentang anggaran atau batas pengeluaran, jelaskan statusnya (aman, waspada, atau overbudget) dan sisa anggaran yang masih bisa dipakai.
 PROMPT;
 
         if (!empty($this->apiKey)) {
@@ -120,9 +146,9 @@ PROMPT;
         try {
             $res = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->apiKey,
-                'HTTP-Referer' => config('app.url', 'http://localhost:8000'),
-                'X-Title' => 'Finansia App',
-                'Content-Type' => 'application/json',
+                'HTTP-Referer'  => config('app.url', 'http://localhost:8000'),
+                'X-Title'       => 'Finansia App',
+                'Content-Type'  => 'application/json',
             ])->timeout(12)->post('https://openrouter.ai/api/v1/chat/completions', [
                 'model' => $model,
                 'messages' => [
@@ -163,20 +189,21 @@ PROMPT;
 
     /**
      * Fallback cerdas lokal bahasa Indonesia jika API AI OpenRouter sedang limit / offline.
+     * Mampu mendeteksi single & multiple cashflow transactions, serta single & multiple budget recordings!
      */
     public function fallbackLocalParser(string $message, array $userAccounts = [], array $userCategories = []): array
     {
         $lowerMsg = strtolower($message);
 
         // 1. Deteksi Pertanyaan Finansial (FINANCIAL_QUERY)
-        $isFinancialQuery = preg_match('/\b(?:berapa|habis berapa|sisa|cek|total|kondisi|rekap|ringkasan|pengeluaran terbesar)\b/i', $lowerMsg)
-            && preg_match('/\b(?:saldo|uang|kas|pengeluaran|pemasukan|jajan|makan|kategori|belanja|bulan ini)\b/i', $lowerMsg);
+        $isFinancialQuery = preg_match('/\b(?:berapa|habis berapa|sisa|cek|total|kondisi|rekap|ringkasan|pengeluaran terbesar|aman gak|aman ga|masih aman)\b/i', $lowerMsg)
+            && preg_match('/\b(?:saldo|uang|kas|pengeluaran|pemasukan|jajan|makan|kategori|belanja|bulan ini|anggaran|budget)\b/i', $lowerMsg);
 
         if ($isFinancialQuery) {
             return [
                 'intent' => 'FINANCIAL_QUERY',
-                'data' => null,
-                'reply' => 'Pertanyaan keuangan terdeteksi.'
+                'data'   => null,
+                'reply'  => 'Pertanyaan keuangan terdeteksi.'
             ];
         }
 
@@ -192,14 +219,175 @@ PROMPT;
         if ($isGreeting || preg_match('/^(?:siapa kamu|kamu siapa|bisa apa|help|bantuan)\??$/i', trim($lowerMsg))) {
             return [
                 'intent' => 'GENERAL_CHAT',
-                'data' => null,
-                'reply' => 'Halo! Saya Asisten AI Finansia 🤖 Saya siap membantu mencatat transaksi keuangan atau menjawab pertanyaan seputar keuangan Anda. Coba tanyakan: "Bulan ini jajan makan udah habis berapa?" atau ketik: "Barusan makan ramen 45rb pake GoPay".'
+                'data'   => null,
+                'reply'  => 'Halo! Saya Asisten AI Finansia 🤖 Saya siap membantu mencatat transaksi (bisa beberapa sekaligus!) atau mengatur anggaran bulanan Anda. Coba ketik: "Atur anggaran makan 1.5jt dan belanja 500rb", atau: "Beli kopi 25k dan bensin 30k pake BCA".'
             ];
         }
 
-        // 3. Ekstrak Nominal Uang
-        $amount = 0;
-        if (preg_match('/(?:rp\.?\s*)?(\d+(?:[.,]\d+)?)\s*(rb|k|ribu|rebu|jt|juta)?\b/i', $lowerMsg, $matches)) {
+        // 3. Deteksi Penetapan Anggaran (RECORD_BUDGET)
+        $isBudgetIntent = preg_match('/\b(?:anggaran|budget|plafon|batas pengeluaran|alokasi)\b/i', $lowerMsg);
+
+        if ($isBudgetIntent) {
+            $budgetItems = $this->extractMultipleBudgets($message, $userCategories);
+            if (!empty($budgetItems)) {
+                return [
+                    'intent' => 'RECORD_BUDGET',
+                    'data'   => [
+                        'items' => $budgetItems,
+                    ],
+                    'reply'  => count($budgetItems) > 1
+                        ? 'Saya menemukan ' . count($budgetItems) . ' rencana anggaran kategori. Silakan periksa rincian di bawah ini dan konfirmasi:'
+                        : 'Saya telah menyiapkan penetapan anggaran kategori Anda. Silakan periksa dan konfirmasi:'
+                ];
+            }
+        }
+
+        // 4. Deteksi Pencatatan Transaksi Cashflow (RECORD_TRANSACTION) - Mendukung Single & Multiple
+        $transactionItems = $this->extractMultipleTransactions($message, $userAccounts, $userCategories);
+
+        if (!empty($transactionItems)) {
+            return [
+                'intent' => 'RECORD_TRANSACTION',
+                'data'   => [
+                    'items' => $transactionItems,
+                ],
+                'reply'  => count($transactionItems) > 1
+                    ? 'Saya menemukan ' . count($transactionItems) . ' transaksi dalam pesan Anda. Silakan tinjau dan konfirmasi untuk menyimpan ke database:'
+                    : 'Saya telah menganalisis transaksi Anda. Silakan tinjau dan konfirmasi untuk menyimpan ke database:'
+            ];
+        }
+
+        return [
+            'intent' => 'GENERAL_CHAT',
+            'data'   => null,
+            'reply'  => 'Saya belum menemukan nominal transaksi atau anggaran yang jelas. Contoh format: "Beli bensin 30k pake BCA", "Atur anggaran makan 1.5jt", atau "Bulan ini pengeluaran saya berapa?".'
+        ];
+    }
+
+    /**
+     * Mengekstrak beberapa anggaran kebutuhan sekaligus dari pesan pengguna.
+     */
+    public function extractMultipleBudgets(string $message, array $userCategories = []): array
+    {
+        $currentMonth = (int) now()->month;
+        $currentYear  = (int) now()->year;
+
+        // Split berdasarkan kata penghubung atau tanda baca: koma, "dan", "serta", "sama", "lalu"
+        $clauses = preg_split('/(?:\s*(?:dan|serta|sama|lalu|,)\s*)+/i', $message);
+        $items = [];
+
+        foreach ($clauses as $clause) {
+            $clause = trim($clause);
+            if (empty($clause)) {
+                continue;
+            }
+
+            $amount = $this->extractAmountFromString($clause);
+            if ($amount >= 1000) {
+                $category = $this->detectKebutuhanFromString($clause, $userCategories);
+
+                $items[] = [
+                    'category' => $category,
+                    'amount'   => $amount,
+                    'month'    => $currentMonth,
+                    'year'     => $currentYear,
+                ];
+            }
+        }
+
+        // Jika split gagal menemukan lebih dari 0, coba ekstrak global
+        if (empty($items)) {
+            $amount = $this->extractAmountFromString($message);
+            if ($amount >= 1000) {
+                $category = $this->detectKebutuhanFromString($message, $userCategories);
+                $items[] = [
+                    'category' => $category,
+                    'amount'   => $amount,
+                    'month'    => $currentMonth,
+                    'year'     => $currentYear,
+                ];
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * Mengekstrak beberapa transaksi sekaligus dari pesan pengguna.
+     */
+    public function extractMultipleTransactions(string $message, array $userAccounts = [], array $userCategories = []): array
+    {
+        // Deteksi apakah ada rekening global yang disebut (misal: "pake bca" di akhir)
+        $globalAccount = $this->detectAccountFromString($message, $userAccounts);
+
+        // Split pesan jika ada tanda koma atau kata penghubung
+        $clauses = preg_split('/(?:\s*(?:dan|serta|sama|lalu|,)\s*)+/i', $message);
+        $items = [];
+
+        foreach ($clauses as $clause) {
+            $clause = trim($clause);
+            if (empty($clause)) {
+                continue;
+            }
+
+            $amount = $this->extractAmountFromString($clause);
+            if ($amount > 0) {
+                $type = $this->detectTypeFromString($clause);
+                $category = $this->detectCategoryFromString($clause, $type, $userCategories);
+                $account = $this->detectAccountFromString($clause, $userAccounts) ?: $globalAccount;
+                $desc = $this->generateCleanDescription($clause, $category, $type);
+
+                $date = now()->format('Y-m-d');
+                if (str_contains(strtolower($clause), 'kemarin')) {
+                    $date = now()->subDay()->format('Y-m-d');
+                }
+
+                $items[] = [
+                    'type'         => $type,
+                    'amount'       => $amount,
+                    'account_name' => $account,
+                    'category'     => $category,
+                    'description'  => $desc,
+                    'date'         => $date,
+                ];
+            }
+        }
+
+        // Jika pemisahan klausa tidak menghasilkan item tapi pesan global memiliki amount
+        if (empty($items)) {
+            $amount = $this->extractAmountFromString($message);
+            if ($amount > 0) {
+                $type = $this->detectTypeFromString($message);
+                $category = $this->detectCategoryFromString($message, $type, $userCategories);
+                $account = $globalAccount;
+                $desc = $this->generateCleanDescription($message, $category, $type);
+
+                $date = now()->format('Y-m-d');
+                if (str_contains(strtolower($message), 'kemarin')) {
+                    $date = now()->subDay()->format('Y-m-d');
+                }
+
+                $items[] = [
+                    'type'         => $type,
+                    'amount'       => $amount,
+                    'account_name' => $account,
+                    'category'     => $category,
+                    'description'  => $desc,
+                    'date'         => $date,
+                ];
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * Ekstrak nominal uang dari cuplikan teks string.
+     */
+    public function extractAmountFromString(string $str): int
+    {
+        $lower = strtolower($str);
+        if (preg_match('/(?:rp\.?\s*)?(\d+(?:[.,]\d+)?)\s*(rb|k|ribu|rebu|jt|juta)?\b/i', $lower, $matches)) {
             $rawNumber = str_replace(',', '.', $matches[1]);
             $multiplier = 1;
             $unit = strtolower($matches[2] ?? '');
@@ -212,107 +400,159 @@ PROMPT;
                 $multiplier = 1000;
             }
 
-            $amount = (int)((float)$rawNumber * $multiplier);
+            return (int) round(((float)$rawNumber) * $multiplier);
         }
 
-        if ($amount <= 0) {
-            return [
-                'intent' => 'GENERAL_CHAT',
-                'data' => null,
-                'reply' => 'Saya belum menemukan nominal transaksi atau maksud pertanyaan Anda. Contoh format: "Beli bensin 30k pake BCA" atau "Bulan ini pengeluaran saya berapa?".'
-            ];
-        }
+        return 0;
+    }
 
-        // 4. Deteksi Tipe (Cash In vs Cash Out)
+    /**
+     * Deteksi tipe transaksi (Cash In vs Cash Out) dari teks.
+     */
+    protected function detectTypeFromString(string $str): string
+    {
+        $lower = strtolower($str);
         $cashInKeywords = ['gaji', 'terima', 'dapat', 'masuk', 'pemasukan', 'bonus', 'transferan', 'cair', 'income', 'hasil'];
-        $type = 'cash_out';
         foreach ($cashInKeywords as $kw) {
-            if (str_contains($lowerMsg, $kw)) {
-                $type = 'cash_in';
-                break;
+            if (str_contains($lower, $kw)) {
+                return 'cash_in';
             }
         }
+        return 'cash_out';
+    }
 
-        // 5. Deteksi Rekening
-        $matchedAccount = null;
+    /**
+     * Deteksi nama rekening yang paling cocok dari teks.
+     */
+    protected function detectAccountFromString(string $str, array $userAccounts = []): ?string
+    {
+        $lower = strtolower($str);
         foreach ($userAccounts as $acc) {
-            if (str_contains($lowerMsg, strtolower($acc))) {
-                $matchedAccount = $acc;
-                break;
-            }
-        }
-        if (!$matchedAccount && !empty($userAccounts)) {
-            $bankKeywords = [
-                'bca' => 'BCA', 'mandiri' => 'Mandiri', 'bri' => 'BRI',
-                'bni' => 'BNI', 'gopay' => 'GoPay', 'ovo' => 'OVO',
-                'dana' => 'Dana', 'shopeepay' => 'ShopeePay', 'jago' => 'Jago',
-                'cash' => 'Cash', 'tunai' => 'Tunai', 'uang tunai' => 'Tunai', 'dompet' => 'Cash'
-            ];
-            foreach ($bankKeywords as $k => $bName) {
-                if (str_contains($lowerMsg, $k)) {
-                    foreach ($userAccounts as $acc) {
-                        if (stripos($acc, $bName) !== false || ($bName === 'Cash' && stripos($acc, 'Tunai') !== false) || ($bName === 'Tunai' && stripos($acc, 'Cash') !== false)) {
-                            $matchedAccount = $acc;
-                            break 2;
-                        }
-                    }
-                    $matchedAccount = $bName;
-                    break;
-                }
-            }
-            if (!$matchedAccount) {
-                $matchedAccount = $userAccounts[0];
+            if (str_contains($lower, strtolower($acc))) {
+                return $acc;
             }
         }
 
-        // 6. Deteksi Kategori
-        $matchedCategory = 'Lainnya';
-        if ($type === 'cash_in') {
-            if (str_contains($lowerMsg, 'gaji')) $matchedCategory = 'Gaji';
-            elseif (str_contains($lowerMsg, 'investasi') || str_contains($lowerMsg, 'saham') || str_contains($lowerMsg, 'reksadana')) $matchedCategory = 'Investasi';
-            elseif (str_contains($lowerMsg, 'freelance') || str_contains($lowerMsg, 'project') || str_contains($lowerMsg, 'proyek')) $matchedCategory = 'Freelance / Project';
-            elseif (str_contains($lowerMsg, 'bonus') || str_contains($lowerMsg, 'thr') || str_contains($lowerMsg, 'hadiah')) $matchedCategory = 'Bonus & Hadiah';
-        } else {
-            $catRules = [
-                'Makanan & Minuman' => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner'],
-                'Transportasi' => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket'],
-                'Belanja' => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana'],
-                'Utilitas & Tagihan' => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
-                'Hiburan' => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
-                'Kesehatan' => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
-            ];
-
-            foreach ($catRules as $catName => $keywords) {
-                foreach ($keywords as $kw) {
-                    if (str_contains($lowerMsg, $kw)) {
-                        $matchedCategory = $catName;
-                        break 2;
-                    }
-                }
-            }
-        }
-
-        // 7. Tanggal
-        $date = now()->format('Y-m-d');
-        if (str_contains($lowerMsg, 'kemarin')) {
-            $date = now()->subDay()->format('Y-m-d');
-        }
-
-        // 8. Deskripsi Ringkas Otomatis
-        $description = $this->generateCleanDescription($message, $matchedCategory, $type);
-
-        return [
-            'intent' => 'RECORD_TRANSACTION',
-            'data' => [
-                'type' => $type,
-                'amount' => $amount,
-                'account_name' => $matchedAccount,
-                'category' => $matchedCategory,
-                'description' => $description,
-                'date' => $date,
-            ],
-            'reply' => 'Saya telah menganalisis transaksi Anda. Silakan tinjau dan konfirmasi untuk menyimpan ke database:'
+        $bankKeywords = [
+            'bca' => 'BCA', 'mandiri' => 'Mandiri', 'bri' => 'BRI',
+            'bni' => 'BNI', 'gopay' => 'GoPay', 'ovo' => 'OVO',
+            'dana' => 'Dana', 'shopeepay' => 'ShopeePay', 'jago' => 'Jago',
+            'cash' => 'Dompet Tunai', 'tunai' => 'Dompet Tunai', 'uang tunai' => 'Dompet Tunai', 'dompet' => 'Dompet Tunai'
         ];
+
+        foreach ($bankKeywords as $k => $bName) {
+            if (str_contains($lower, $k)) {
+                foreach ($userAccounts as $acc) {
+                    if (stripos($acc, $bName) !== false || ($bName === 'Dompet Tunai' && stripos($acc, 'Cash') !== false)) {
+                        return $acc;
+                    }
+                }
+                return $bName;
+            }
+        }
+
+        return !empty($userAccounts) ? $userAccounts[0] : null;
+    }
+
+    /**
+     * Deteksi kategori dari cuplikan teks.
+     */
+    protected function detectCategoryFromString(string $str, string $type = 'cash_out', array $userCategories = []): string
+    {
+        $lower = strtolower($str);
+
+        if ($type === 'cash_in') {
+            if (str_contains($lower, 'gaji')) return 'Gaji';
+            if (str_contains($lower, 'investasi') || str_contains($lower, 'saham') || str_contains($lower, 'reksadana')) return 'Investasi';
+            if (str_contains($lower, 'freelance') || str_contains($lower, 'project') || str_contains($lower, 'proyek')) return 'Freelance / Project';
+            if (str_contains($lower, 'bonus') || str_contains($lower, 'thr') || str_contains($lower, 'hadiah')) return 'Bonus & Hadiah';
+            return 'Lainnya';
+        }
+
+        // Cek kecocokan kategori kustom pengguna terlebih dahulu (prioritas nama terpanjang)
+        if (!empty($userCategories)) {
+            $sortedUserCats = $userCategories;
+            usort($sortedUserCats, fn($a, $b) => strlen($b) <=> strlen($a));
+            foreach ($sortedUserCats as $uCat) {
+                $uCatLower = strtolower($uCat);
+                if ($uCatLower !== 'lainnya' && !empty($uCatLower) && str_contains($lower, $uCatLower)) {
+                    return $uCat;
+                }
+            }
+        }
+
+        $catRules = [
+            'Makanan & Minuman' => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner', 'kuliner', 'jajan'],
+            'Transportasi'      => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport'],
+            'Belanja'           => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako'],
+            'Utilitas & Tagihan' => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
+            'Hiburan'           => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
+            'Kesehatan'         => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
+        ];
+
+        foreach ($catRules as $catName => $keywords) {
+            foreach ($keywords as $kw) {
+                if (str_contains($lower, $kw)) {
+                    return $catName;
+                }
+            }
+        }
+
+        return 'Lainnya';
+    }
+
+    /**
+     * Deteksi nama kebutuhan (kategori) dari kalimat penetapan anggaran.
+     * Mampu mendeteksi kebutuhan kustom seperti 'Kos', 'Sedekah', 'Gym', 'Skincare', 'Cicilan Motor', dll.
+     */
+    public function detectKebutuhanFromString(string $str, array $userCategories = []): string
+    {
+        $lower = strtolower($str);
+
+        // 1. Cek apakah ada kategori milik user yang cocok (prioritas string terpanjang)
+        if (!empty($userCategories)) {
+            $sortedUserCats = $userCategories;
+            usort($sortedUserCats, fn($a, $b) => strlen($b) <=> strlen($a));
+            foreach ($sortedUserCats as $uCat) {
+                $uCatLower = strtolower($uCat);
+                if ($uCatLower !== 'lainnya' && !empty($uCatLower) && str_contains($lower, $uCatLower)) {
+                    return $uCat;
+                }
+            }
+        }
+
+        // 2. Cek kategori standar bawaan
+        $catRules = [
+            'Makanan & Minuman' => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner', 'kuliner', 'jajan'],
+            'Transportasi'      => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport'],
+            'Belanja'           => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako'],
+            'Utilitas & Tagihan' => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
+            'Hiburan'           => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
+            'Kesehatan'         => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
+        ];
+
+        foreach ($catRules as $catName => $keywords) {
+            foreach ($keywords as $kw) {
+                if (str_contains($lower, $kw)) {
+                    return $catName;
+                }
+            }
+        }
+
+        // 3. Ekstrak nama kebutuhan spesifik dari kalimat dengan menghapus kata perintah, kata kunci budget, nominal & filler
+        $clean = $lower;
+        $clean = preg_replace('/\b(?:atur|buat|catat(?:kan)?|pasang|tetapkan|tambah(?:kan)?|masukkan|tolong|rencana(?:kan)?|alokasi(?:kan)?)\b/i', '', $clean);
+        $clean = preg_replace('/\b(?:anggaran|budget|plafon|batas(?:\s+pengeluaran)?|kebutuhan)\b/i', '', $clean);
+        $clean = preg_replace('/\b(?:untuk|buat|sebesar|senilai|nominal|sebulan|tiap\s+bulan|per\s+bulan|bulan\s+ini|ini|dong|nih|ya|deh)\b/i', '', $clean);
+        $clean = preg_replace('/(?:rp\.?\s*)?\d+(?:[.,]\d+)?\s*(?:rb|k|ribu|rebu|jt|juta)?\b/i', '', $clean);
+        $clean = trim(preg_replace('/\s+/', ' ', $clean));
+        $clean = trim($clean, " \t\n\r\0\x0B,.-_");
+
+        if (!empty($clean) && strlen($clean) >= 2 && strlen($clean) <= 40) {
+            return ucwords($clean);
+        }
+
+        return 'Lainnya';
     }
 
     /**
@@ -326,6 +566,25 @@ PROMPT;
         $pengeluaran = 'Rp ' . number_format($snapshot['cashflow_bulan_ini']['total_pengeluaran'] ?? 0, 0, ',', '.');
         $pemasukan = 'Rp ' . number_format($snapshot['cashflow_bulan_ini']['total_pemasukan'] ?? 0, 0, ',', '.');
         $sisaKas = 'Rp ' . number_format($snapshot['cashflow_bulan_ini']['sisa_kas'] ?? 0, 0, ',', '.');
+
+        // Pertanyaan Anggaran Bulanan
+        if (str_contains($lower, 'anggaran') || str_contains($lower, 'budget')) {
+            $budgetData = $snapshot['anggaran_bulan_ini'] ?? null;
+            if ($budgetData && $budgetData['total_anggaran'] > 0) {
+                $totalB = 'Rp ' . number_format($budgetData['total_anggaran'], 0, ',', '.');
+                $spentB = 'Rp ' . number_format($budgetData['total_terpakai'], 0, ',', '.');
+                $remB = 'Rp ' . number_format(abs($budgetData['sisa_anggaran']), 0, ',', '.');
+                $statusText = match ($budgetData['status_agregat'] ?? 'safe') {
+                    'overbudget' => 'sudah melebihi batas (Overbudget)!',
+                    'warning'    => 'sudah mendekati batas (Waspada)',
+                    default      => 'masih aman',
+                };
+
+                return "Untuk {$periode}, total anggaran yang Anda tetapkan adalah {$totalB}. Pengeluaran Anda saat ini sebesar {$spentB} dan statusnya {$statusText}. Sisa anggaran: {$remB}.";
+            } else {
+                return "Anda belum menetapkan anggaran bulanan untuk {$periode}. Anda bisa mengaturnya di menu Anggaran atau ketik: 'Atur anggaran makan 1.5jt'.";
+            }
+        }
 
         // Pertanyaan kategori (misal: jajan makan)
         if (str_contains($lower, 'makan') || str_contains($lower, 'jajan') || str_contains($lower, 'minum')) {

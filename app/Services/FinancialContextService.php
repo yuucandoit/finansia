@@ -56,20 +56,48 @@ class FinancialContextService
             ])
             ->toArray();
 
+        // 5. Anggaran Bulanan & Status Pemakaian
+        $currentMonth = (int) now()->month;
+        $currentYear  = (int) now()->year;
+        $budgets = $user->budgets()
+            ->with('category')
+            ->where('month', $currentMonth)
+            ->where('year', $currentYear)
+            ->get();
+
+        $totalBudget = (float) $budgets->sum('amount');
+        $totalBudgetSpent = (float) $budgets->sum(fn($b) => $b->spent);
+
+        $budgetSnapshot = [
+            'total_anggaran'    => (int) $totalBudget,
+            'total_terpakai'    => (int) $totalBudgetSpent,
+            'sisa_anggaran'     => (int) ($totalBudget - $totalBudgetSpent),
+            'status_agregat'    => $totalBudgetSpent > $totalBudget && $totalBudget > 0 ? 'overbudget' : ($totalBudget > 0 && ($totalBudgetSpent / $totalBudget) >= 0.8 ? 'warning' : 'safe'),
+            'daftar_anggaran'   => $budgets->map(fn($b) => [
+                'kategori'   => $b->category->name ?? 'Lainnya',
+                'batas'      => (int) $b->amount,
+                'terpakai'   => (int) $b->spent,
+                'sisa'       => (int) $b->remaining,
+                'persentase' => (float) $b->percentage,
+                'status'     => $b->status,
+            ])->toArray(),
+        ];
+
         return [
-            'periode_bulan' => Carbon::now()->translatedFormat('F Y'),
-            'total_saldo' => (int) $totalBalance,
-            'daftar_rekening' => $accounts->map(fn($a) => [
-                'nama' => $a->name,
+            'periode_bulan'            => Carbon::now()->translatedFormat('F Y'),
+            'total_saldo'              => (int) $totalBalance,
+            'daftar_rekening'          => $accounts->map(fn($a) => [
+                'nama'  => $a->name,
                 'saldo' => (int) $a->current_balance
             ])->toArray(),
-            'cashflow_bulan_ini' => [
-                'total_pemasukan' => (int) $monthlyIncome,
+            'cashflow_bulan_ini'       => [
+                'total_pemasukan'   => (int) $monthlyIncome,
                 'total_pengeluaran' => (int) $monthlyExpense,
-                'sisa_kas' => (int) ($monthlyIncome - $monthlyExpense),
+                'sisa_kas'          => (int) ($monthlyIncome - $monthlyExpense),
             ],
             'pengeluaran_per_kategori' => $categoryBreakdown,
-            'transaksi_terbaru' => $recentTransactions,
+            'transaksi_terbaru'        => $recentTransactions,
+            'anggaran_bulan_ini'       => $budgetSnapshot,
         ];
     }
 }
