@@ -59,7 +59,8 @@ Aturan Wajib:
       }
       // ATAU Jika RECORD_BUDGET:
       {
-        "category": "string (nama kebutuhan/kategori, sesuaikan dari daftar kategori atau jika user menyebut kebutuhan spesifik baru seperti Kos, Sedekah, Gym, Skincare, Cicilan Motor dll., gunakan nama kebutuhan tersebut)",
+        "name": "string (nama pos/kebutuhan spesifik, contoh: 'Kontrakan', 'Listrik', 'Wifi', 'Nabung Mamah', 'Bensin', 'Makan')",
+        "category": "string (nama kategori master standar: 'Makanan & Minuman', 'Transportasi', 'Utilitas & Tagihan', 'Belanja', 'Hiburan', 'Kesehatan', 'Tempat Tinggal', 'Keluarga & Sedekah', 'Tabungan & Investasi', 'Pendidikan', 'Lainnya')",
         "amount": integer_nominal,
         "month": integer_bulan (1-12, default {$currentMonth}),
         "year": integer_tahun (default {$currentYear})
@@ -71,7 +72,7 @@ Aturan Wajib:
 
 3. Skema Intent:
 - "RECORD_TRANSACTION": Jika user ingin mencatat 1 atau lebih transaksi cashflow (contoh: "makan ramen 45rb", "beli kopi 25k dan bensin 30k pake bca", "gaji masuk 5jt"). Isi "data.items" dengan array transaksi.
-- "RECORD_BUDGET": Jika user ingin menetapkan/mengatur/mencatat 1 atau lebih batas anggaran bulanan per kebutuhan (contoh: "atur anggaran makan 1.5jt", "catat budget bayar kos 1.5jt dan sedekah 200rb", "anggaran skincare 300rb", "pasang batas pengeluaran jajan 200rb"). Setiap kebutuhan yang disebutkan dicatat sebagai kategori anggarannya. Isi "data.items" dengan array objek anggaran.
+- "RECORD_BUDGET": Jika user ingin menetapkan/mengatur/mencatat 1 atau lebih batas anggaran bulanan per kebutuhan (contoh: "atur anggaran makan 1.5jt", "catat budget kontrakan 1.5jt, listrik 300rb, dan sedekah mamah 500rb", "anggaran skincare 300rb"). Berikan "name" sebagai nama pos kebutuhan spesifik (misal: "Kontrakan", "Listrik", "Sedekah Mamah") dan "category" sebagai kategori master standar keuangan (misal: Tempat Tinggal, Utilitas & Tagihan, Keluarga & Sedekah, Belanja, Makanan & Minuman). Isi "data.items" dengan array objek anggaran.
 - "FINANCIAL_QUERY": Jika user bertanya tentang saldo, pengeluaran, sisa kas, perbandingan kategori, ATAU status anggaran bulanan (contoh: "bulan ini jajan makan udah habis berapa?", "sisa saldo berapa?", "apakah budget makan masih aman?"). Set "data": null.
 - "GENERAL_CHAT": Jika sekadar menyapa atau ngobrol umum di luar niat catat atau tanya data keuangan (contoh: "halo", "apa kabar", "siapa kamu"). Set "data": null.
 PROMPT;
@@ -284,9 +285,14 @@ PROMPT;
 
             $amount = $this->extractAmountFromString($clause);
             if ($amount >= 1000) {
-                $category = $this->detectKebutuhanFromString($clause, $userCategories);
+                $category = $this->detectCategoryFromString($clause, 'cash_out', $userCategories);
+                $name = $this->extractBudgetNameFromString($clause);
+                if (empty($name) || strtolower($name) === 'lainnya') {
+                    $name = $category;
+                }
 
                 $items[] = [
+                    'name'     => $name,
                     'category' => $category,
                     'amount'   => $amount,
                     'month'    => $currentMonth,
@@ -299,8 +305,14 @@ PROMPT;
         if (empty($items)) {
             $amount = $this->extractAmountFromString($message);
             if ($amount >= 1000) {
-                $category = $this->detectKebutuhanFromString($message, $userCategories);
+                $category = $this->detectCategoryFromString($message, 'cash_out', $userCategories);
+                $name = $this->extractBudgetNameFromString($message);
+                if (empty($name) || strtolower($name) === 'lainnya') {
+                    $name = $category;
+                }
+
                 $items[] = [
+                    'name'     => $name,
                     'category' => $category,
                     'amount'   => $amount,
                     'month'    => $currentMonth,
@@ -482,12 +494,16 @@ PROMPT;
         }
 
         $catRules = [
-            'Makanan & Minuman' => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner', 'kuliner', 'jajan'],
-            'Transportasi'      => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport'],
-            'Belanja'           => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako'],
-            'Utilitas & Tagihan' => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
-            'Hiburan'           => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
-            'Kesehatan'         => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
+            'Tempat Tinggal'      => ['kos', 'kost', 'kontrakan', 'sewa rumah', 'cicilan rumah', 'kpr', 'rumah', 'apartemen'],
+            'Keluarga & Sedekah'  => ['sedekah', 'infaq', 'zakat', 'mamah', 'ibu', 'ayah', 'bapak', 'ortu', 'orang tua', 'keluarga', 'pegangan mamah'],
+            'Tabungan & Investasi'=> ['nabung', 'tabungan', 'investasi', 'deposito', 'reksadana', 'saham', 'crypto', 'emas'],
+            'Pendidikan'          => ['sekolah', 'kuliah', 'kursus', 'les', 'buku', 'spp', 'ujian', 'pendidikan'],
+            'Makanan & Minuman'   => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner', 'kuliner', 'jajan'],
+            'Transportasi'        => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport'],
+            'Belanja'             => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako'],
+            'Utilitas & Tagihan'  => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
+            'Hiburan'             => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
+            'Kesehatan'           => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
         ];
 
         foreach ($catRules as $catName => $keywords) {
@@ -499,6 +515,27 @@ PROMPT;
         }
 
         return 'Lainnya';
+    }
+
+    /**
+     * Ekstrak nama pos/kebutuhan anggaran spesifik dari string.
+     * Contoh: "anggaran kontrakan 1.5jt" -> "Kontrakan", "listrik rumah 300rb" -> "Listrik Rumah".
+     */
+    public function extractBudgetNameFromString(string $str): string
+    {
+        $clean = strtolower($str);
+        $clean = preg_replace('/\b(?:atur|buat|catat(?:kan)?|pasang|tetapkan|tambah(?:kan)?|masukkan|tolong|rencana(?:kan)?|alokasi(?:kan)?)\b/i', '', $clean);
+        $clean = preg_replace('/\b(?:anggaran|budget|plafon|batas(?:\s+pengeluaran)?|kebutuhan)\b/i', '', $clean);
+        $clean = preg_replace('/\b(?:untuk|buat|sebesar|senilai|nominal|sebulan|tiap\s+bulan|per\s+bulan|bulan\s+ini|ini|dong|nih|ya|deh)\b/i', '', $clean);
+        $clean = preg_replace('/(?:rp\.?\s*)?\d+(?:[.,]\d+)?\s*(?:rb|k|ribu|rebu|jt|juta)?\b/i', '', $clean);
+        $clean = trim(preg_replace('/\s+/', ' ', $clean));
+        $clean = trim($clean, " \t\n\r\0\x0B,.-_");
+
+        if (!empty($clean) && strlen($clean) >= 2 && strlen($clean) <= 50) {
+            return ucwords($clean);
+        }
+
+        return '';
     }
 
     /**
@@ -523,12 +560,16 @@ PROMPT;
 
         // 2. Cek kategori standar bawaan
         $catRules = [
-            'Makanan & Minuman' => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner', 'kuliner', 'jajan'],
-            'Transportasi'      => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport'],
-            'Belanja'           => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako'],
-            'Utilitas & Tagihan' => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
-            'Hiburan'           => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
-            'Kesehatan'         => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
+            'Tempat Tinggal'      => ['kos', 'kost', 'kontrakan', 'sewa rumah', 'cicilan rumah', 'kpr', 'rumah', 'apartemen'],
+            'Keluarga & Sedekah'  => ['sedekah', 'infaq', 'zakat', 'mamah', 'ibu', 'ayah', 'bapak', 'ortu', 'orang tua', 'keluarga', 'pegangan mamah'],
+            'Tabungan & Investasi'=> ['nabung', 'tabungan', 'investasi', 'deposito', 'reksadana', 'saham', 'crypto', 'emas'],
+            'Pendidikan'          => ['sekolah', 'kuliah', 'kursus', 'les', 'buku', 'spp', 'ujian', 'pendidikan'],
+            'Makanan & Minuman'   => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner', 'kuliner', 'jajan'],
+            'Transportasi'        => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport'],
+            'Belanja'             => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako'],
+            'Utilitas & Tagihan'  => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
+            'Hiburan'             => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
+            'Kesehatan'           => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
         ];
 
         foreach ($catRules as $catName => $keywords) {
@@ -540,16 +581,9 @@ PROMPT;
         }
 
         // 3. Ekstrak nama kebutuhan spesifik dari kalimat dengan menghapus kata perintah, kata kunci budget, nominal & filler
-        $clean = $lower;
-        $clean = preg_replace('/\b(?:atur|buat|catat(?:kan)?|pasang|tetapkan|tambah(?:kan)?|masukkan|tolong|rencana(?:kan)?|alokasi(?:kan)?)\b/i', '', $clean);
-        $clean = preg_replace('/\b(?:anggaran|budget|plafon|batas(?:\s+pengeluaran)?|kebutuhan)\b/i', '', $clean);
-        $clean = preg_replace('/\b(?:untuk|buat|sebesar|senilai|nominal|sebulan|tiap\s+bulan|per\s+bulan|bulan\s+ini|ini|dong|nih|ya|deh)\b/i', '', $clean);
-        $clean = preg_replace('/(?:rp\.?\s*)?\d+(?:[.,]\d+)?\s*(?:rb|k|ribu|rebu|jt|juta)?\b/i', '', $clean);
-        $clean = trim(preg_replace('/\s+/', ' ', $clean));
-        $clean = trim($clean, " \t\n\r\0\x0B,.-_");
-
-        if (!empty($clean) && strlen($clean) >= 2 && strlen($clean) <= 40) {
-            return ucwords($clean);
+        $posName = $this->extractBudgetNameFromString($str);
+        if (!empty($posName)) {
+            return $posName;
         }
 
         return 'Lainnya';

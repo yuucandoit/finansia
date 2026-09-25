@@ -42,23 +42,32 @@ class BudgetController extends Controller
         $totalRemaining = $totalBudget - $totalSpent;
         $overallPercentage = $totalBudget > 0 ? round(($totalSpent / $totalBudget) * 100, 1) : 0;
 
-        // Kategori yang belum memiliki anggaran di periode ini
-        $budgetedCategoryIds = $budgets->pluck('category_id')->toArray();
+        // Kategori pengeluaran (semua kategori Cash Out dapat dipilih)
         $availableCategories = Category::forUser($userId)
             ->where('type', 'Cash Out')
-            ->whereNotIn('id', $budgetedCategoryIds)
             ->orderBy('name')
             ->get();
 
-        $allCategories = Category::forUser($userId)->where('type', 'Cash Out')->orderBy('name')->get();
+        $allCategories = $availableCategories;
 
         // Helper label bulan
         $selectedDate = Carbon::createFromDate($year, $month, 1);
+
+        // Cek ketersediaan anggaran pada bulan sebelumnya untuk fitur "Salin dari Bulan Lalu"
+        $prevMonth = $month === 1 ? 12 : $month - 1;
+        $prevYear  = $month === 1 ? $year - 1 : $year;
+        $hasPreviousBudgets = Budget::where('user_id', $userId)
+            ->where('month', $prevMonth)
+            ->where('year', $prevYear)
+            ->exists();
 
         return view('budget', [
             'budgets'             => $budgets,
             'month'               => $month,
             'year'                => $year,
+            'prevMonth'           => $prevMonth,
+            'prevYear'            => $prevYear,
+            'hasPreviousBudgets'  => $hasPreviousBudgets,
             'selectedDate'        => $selectedDate,
             'totalBudget'         => $totalBudget,
             'totalSpent'          => $totalSpent,
@@ -70,50 +79,67 @@ class BudgetController extends Controller
     }
 
     /**
-     * Menyimpan anggaran baru atau memperbarui jika sudah ada di bulan/tahun yang sama.
+     * Menyimpan anggaran baru atau memperbarui jika sudah ada nama yang sama di bulan/tahun yang sama.
      */
     public function store(Request $request): RedirectResponse
     {
         $userId = auth()->id();
 
         $validated = $request->validate([
+            'name'          => ['nullable', 'string', 'max:100'],
+            'new_kebutuhan' => ['nullable', 'string', 'max:100'],
             'category_id'   => ['nullable'],
-            'new_kebutuhan' => ['nullable', 'string', 'max:50'],
             'amount'        => ['required', 'numeric', 'min:1000'],
             'month'         => ['required', 'integer', 'between:1,12'],
             'year'          => ['required', 'integer', 'between:2020,2099'],
+        ], [
+            'amount.required' => 'Nominal anggaran wajib diisi.',
+            'amount.min'      => 'Nominal anggaran minimal Rp 1.000.',
         ]);
 
-        $newKebutuhan = trim($request->input('new_kebutuhan', ''));
-        if (!empty($newKebutuhan)) {
-            $cat = Category::findOrCreateKebutuhan($newKebutuhan, $userId);
-            $categoryId = $cat->id;
-        } elseif (!empty($validated['category_id']) && $validated['category_id'] !== '__custom__') {
-            $categoryId = (int) $validated['category_id'];
-        } else {
-            return back()->withErrors(['category_id' => 'Pilih kategori atau ketik nama kebutuhan baru.'])->withInput();
+        $name = trim($validated['name'] ?? $validated['new_kebutuhan'] ?? '');
+        $categoryId = !empty($validated['category_id']) && is_numeric($validated['category_id'])
+            ? (int) $validated['category_id']
+            : null;
+
+        if (!$name && !$categoryId) {
+            return back()->withErrors(['name' => 'Nama kebutuhan atau kategori wajib diisi.'])->withInput();
         }
 
-        Budget::updateOrCreate(
-            [
-                'user_id'     => $userId,
-                'category_id' => $categoryId,
-                'month'       => $validated['month'],
-                'year'        => $validated['year'],
-            ],
-            [
-                'amount' => $validated['amount'],
-            ]
+        $budgetService = app(\App\Services\BudgetService::class);
+        if (!$categoryId) {
+            $cat = $budgetService->resolveCategory($name, $userId);
+            $categoryId = $cat ? $cat->id : null;
+        }
+
+        if (!$categoryId) {
+            $cat = Category::where('name', 'Lainnya')->where('type', 'Cash Out')->first()
+                ?: Category::where('type', 'Cash Out')->first();
+            $categoryId = $cat->id;
+        }
+
+        if ($name === '') {
+            $cat = Category::find($categoryId);
+            $name = $cat ? $cat->name : 'Anggaran';
+        }
+
+        Budget::upsertBudget(
+            $userId,
+            $name,
+            $categoryId,
+            (int) $validated['month'],
+            (int) $validated['year'],
+            (float) $validated['amount']
         );
 
         return redirect()->route('budget.index', [
             'month' => $validated['month'],
             'year'  => $validated['year'],
-        ])->with('success', 'Anggaran kebutuhan berhasil disimpan!');
+        ])->with('success', 'Anggaran pos "' . $name . '" berhasil disimpan!');
     }
 
     /**
-     * Memperbarui nominal batas anggaran.
+     * Memperbarui nominal atau nama batas anggaran.
      */
     public function update(Request $request, Budget $budget): RedirectResponse
     {
@@ -122,17 +148,25 @@ class BudgetController extends Controller
         }
 
         $validated = $request->validate([
-            'amount' => ['required', 'numeric', 'min:1000'],
+            'name'        => ['nullable', 'string', 'max:100'],
+            'category_id' => ['nullable', 'exists:categories,id'],
+            'amount'      => ['required', 'numeric', 'min:1000'],
         ]);
 
-        $budget->update([
-            'amount' => $validated['amount'],
-        ]);
+        $updateData = ['amount' => $validated['amount']];
+        if (!empty($validated['name'])) {
+            $updateData['name'] = trim($validated['name']);
+        }
+        if (!empty($validated['category_id'])) {
+            $updateData['category_id'] = (int) $validated['category_id'];
+        }
+
+        $budget->update($updateData);
 
         return redirect()->route('budget.index', [
             'month' => $budget->month,
             'year'  => $budget->year,
-        ])->with('success', 'Nominal anggaran berhasil diperbarui!');
+        ])->with('success', 'Anggaran berhasil diperbarui!');
     }
 
     /**
@@ -153,5 +187,33 @@ class BudgetController extends Controller
             'month' => $month,
             'year'  => $year,
         ])->with('success', 'Anggaran berhasil dihapus.');
+    }
+
+    /**
+     * Menyalin seluruh anggaran kebutuhan dari bulan sebelumnya ke bulan ini via Web.
+     */
+    public function copyPrevious(Request $request, \App\Services\BudgetService $budgetService): RedirectResponse
+    {
+        $month = (int) $request->input('month', now()->month);
+        $year  = (int) $request->input('year', now()->year);
+
+        if ($month < 1 || $month > 12) {
+            $month = (int) now()->month;
+        }
+        if ($year < 2020 || $year > 2099) {
+            $year = (int) now()->year;
+        }
+
+        try {
+            $result = $budgetService->copyPreviousMonthBudgets($request->user(), $month, $year);
+            return redirect()->route('budget.index', ['month' => $month, 'year' => $year])
+                ->with('success', "Berhasil menyalin {$result['count']} anggaran kebutuhan dari bulan sebelumnya!");
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route('budget.index', ['month' => $month, 'year' => $year])
+                ->withErrors(['copy' => $e->getMessage()]);
+        } catch (\Exception $e) {
+            return redirect()->route('budget.index', ['month' => $month, 'year' => $year])
+                ->withErrors(['copy' => 'Gagal menyalin anggaran: ' . $e->getMessage()]);
+        }
     }
 }

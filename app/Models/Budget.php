@@ -15,6 +15,7 @@ class Budget extends Model
 
     protected $fillable = [
         'user_id',
+        'name',
         'category_id',
         'amount',
         'month',
@@ -34,9 +35,82 @@ class Budget extends Model
         'status',
     ];
 
+    protected static function booted()
+    {
+        static::creating(function ($budget) {
+            if (empty($budget->name)) {
+                $category = Category::find($budget->category_id);
+                $budget->name = $category ? $category->name : 'Anggaran';
+            }
+        });
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Menyimpan, memperbarui, atau merestore anggaran bulanan pengguna per pos kebutuhan (name).
+     * Mendukung pemanggilan 6 argumen (userId, name, categoryId, month, year, amount)
+     * atau 5 argumen (userId, categoryId, month, year, amount) untuk kompatibilitas.
+     * Mengatasi kendala unique constraint SQLSTATE[23505] pada PostgreSQL
+     * ketika data anggaran sebelumnya berada dalam status soft-deleted.
+     */
+    public static function upsertBudget(
+        int $userId,
+        string|int $name,
+        int|float $categoryId,
+        ?int $month = null,
+        ?int $year = null,
+        ?float $amount = null
+    ): self {
+        // Handle 5 arguments: upsertBudget($userId, $categoryId, $month, $year, $amount)
+        if ($amount === null && is_numeric($name) && $year !== null) {
+            $catId = (int) $name;
+            $m = (int) $categoryId;
+            $y = (int) $month;
+            $amt = (float) $year;
+
+            $cat = Category::find($catId);
+            $trimmedName = $cat ? $cat->name : 'Anggaran';
+            $categoryId = $catId;
+            $month = $m;
+            $year = $y;
+            $amount = $amt;
+        } else {
+            $trimmedName = trim((string) $name);
+            $categoryId = (int) $categoryId;
+            $amount = (float) $amount;
+        }
+
+        $budget = static::withTrashed()
+            ->where('user_id', $userId)
+            ->whereRaw('LOWER(name) = ?', [strtolower($trimmedName)])
+            ->where('month', $month)
+            ->where('year', $year)
+            ->first();
+
+        if ($budget) {
+            if ($budget->trashed()) {
+                $budget->restore();
+            }
+            $budget->name = $trimmedName;
+            $budget->category_id = $categoryId;
+            $budget->amount = $amount;
+            $budget->save();
+
+            return $budget;
+        }
+
+        return static::create([
+            'user_id'     => $userId,
+            'name'        => $trimmedName,
+            'category_id' => $categoryId,
+            'month'       => $month,
+            'year'        => $year,
+            'amount'      => $amount,
+        ]);
     }
 
     public function category()
@@ -45,18 +119,39 @@ class Budget extends Model
     }
 
     /**
-     * Hitung total pengeluaran riil pada kategori & periode anggaran ini.
+     * Hitung total pengeluaran riil pada pos anggaran & kategori ini.
      */
     public function getSpentAttribute(): float
     {
         $startDate = Carbon::createFromDate($this->year, $this->month, 1)->startOfMonth();
         $endDate = Carbon::createFromDate($this->year, $this->month, 1)->endOfMonth();
 
-        return (float) Transaction::where('user_id', $this->user_id)
+        // Cek apakah ada multiple pos anggaran di kategori yang sama pada bulan ini
+        $otherBudgetsCount = static::where('user_id', $this->user_id)
+            ->where('category_id', $this->category_id)
+            ->where('month', $this->month)
+            ->where('year', $this->year)
+            ->where('id', '!=', $this->id)
+            ->count();
+
+        $query = Transaction::where('user_id', $this->user_id)
             ->where('category_id', $this->category_id)
             ->whereIn('type', ['Cash Out'])
-            ->whereBetween('transaction_date', [$startDate, $endDate])
-            ->sum('amount');
+            ->whereBetween('transaction_date', [$startDate, $endDate]);
+
+        if ($otherBudgetsCount > 0 && !empty($this->name)) {
+            // Filter cerdas berdasarkan kata kunci nama pos kebutuhan
+            $keywords = array_filter(explode(' ', strtolower(trim($this->name))), fn($w) => strlen($w) > 2);
+            if (!empty($keywords)) {
+                $query->where(function ($q) use ($keywords) {
+                    foreach ($keywords as $kw) {
+                        $q->orWhereRaw('LOWER(description) LIKE ?', ['%' . $kw . '%']);
+                    }
+                });
+            }
+        }
+
+        return (float) $query->sum('amount');
     }
 
     /**

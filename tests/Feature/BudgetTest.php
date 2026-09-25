@@ -66,31 +66,24 @@ test('user can create a monthly budget for a category', function () {
     ]);
 });
 
-test('user can create a monthly budget with custom kebutuhan name via web', function () {
+test('user can create a monthly budget with custom pos name via web', function () {
     $user = User::factory()->create();
 
     $response = $this->actingAs($user)->post('/anggaran/store', [
-        'new_kebutuhan' => 'Bayar Kos',
-        'amount'        => 1750000,
-        'month'         => 9,
-        'year'          => 2026,
+        'name'   => 'Bayar Kos',
+        'amount' => 1750000,
+        'month'  => 9,
+        'year'   => 2026,
     ]);
 
     $response->assertRedirect('/anggaran?month=9&year=2026');
 
-    $this->assertDatabaseHas('categories', [
+    $this->assertDatabaseHas('budgets', [
         'user_id' => $user->id,
         'name'    => 'Bayar Kos',
-    ]);
-
-    $category = Category::where('user_id', $user->id)->where('name', 'Bayar Kos')->first();
-
-    $this->assertDatabaseHas('budgets', [
-        'user_id'     => $user->id,
-        'category_id' => $category->id,
-        'amount'      => 1750000,
-        'month'       => 9,
-        'year'        => 2026,
+        'amount'  => 1750000,
+        'month'   => 9,
+        'year'    => 2026,
     ]);
 });
 
@@ -289,7 +282,7 @@ test('api user can get budgets with summary and available categories', function 
         ->assertJsonPath('data.period.year', 2026)
         ->assertJsonPath('data.summary.total_budget', 2000000)
         ->assertJsonCount(1, 'data.budgets')
-        ->assertJsonCount(1, 'data.available_categories'); // Transportasi is still unbudgeted
+        ->assertJsonPath('data.available_categories', fn($cats) => collect($cats)->pluck('name')->contains('Transportasi'));
 });
 
 test('api user can store budget via POST /api/v1/budgets', function () {
@@ -362,25 +355,26 @@ test('api user can delete budget via DELETE /api/v1/budgets/{id}', function () {
     $this->assertSoftDeleted('budgets', ['id' => $budget->id]);
 });
 
-test('api user can store budget with custom kebutuhan name', function () {
+test('api user can store budget with custom pos name', function () {
     $user = User::factory()->create();
     Sanctum::actingAs($user);
 
     $response = $this->postJson('/api/v1/budgets', [
-        'kebutuhan' => 'Skincare & Perawatan',
-        'amount'    => 450000,
-        'month'     => 9,
-        'year'      => 2026,
+        'name'   => 'Skincare & Perawatan',
+        'amount' => 450000,
+        'month'  => 9,
+        'year'   => 2026,
     ]);
 
     $response->assertStatus(201)
         ->assertJsonPath('status', 'success')
-        ->assertJsonPath('data.category.name', 'Skincare & Perawatan')
+        ->assertJsonPath('data.name', 'Skincare & Perawatan')
         ->assertJsonPath('data.amount', 450000);
 
-    $this->assertDatabaseHas('categories', [
+    $this->assertDatabaseHas('budgets', [
         'user_id' => $user->id,
         'name'    => 'Skincare & Perawatan',
+        'amount'  => 450000,
     ]);
 });
 
@@ -403,3 +397,227 @@ test('api user can batch store multiple budgets', function () {
 
     expect(Budget::where('user_id', $user->id)->count())->toBe(3);
 });
+
+test('user can copy previous month budgets via web', function () {
+    $user = User::factory()->create();
+    $cat1 = Category::where('name', 'Makanan & Minuman')->first();
+    $cat2 = Category::where('name', 'Transportasi')->first();
+
+    // Create August budgets
+    Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat1->id,
+        'amount'      => 1500000,
+        'month'       => 8,
+        'year'        => 2026,
+    ]);
+    Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat2->id,
+        'amount'      => 600000,
+        'month'       => 8,
+        'year'        => 2026,
+    ]);
+
+    // Copy to September 2026
+    $response = $this->actingAs($user)->post('/anggaran/copy-previous', [
+        'month' => 9,
+        'year'  => 2026,
+    ]);
+
+    $response->assertRedirect('/anggaran?month=9&year=2026');
+    $response->assertSessionHas('success');
+
+    expect(Budget::where('user_id', $user->id)->where('month', 9)->where('year', 2026)->count())->toBe(2);
+    $this->assertDatabaseHas('budgets', [
+        'user_id'     => $user->id,
+        'category_id' => $cat1->id,
+        'amount'      => 1500000,
+        'month'       => 9,
+        'year'        => 2026,
+    ]);
+});
+
+test('api user can copy previous month budgets via POST /api/v1/budgets/copy-previous', function () {
+    $user = User::factory()->create();
+    Sanctum::actingAs($user);
+
+    $cat1 = Category::where('name', 'Makanan & Minuman')->first();
+    $cat2 = Category::where('name', 'Transportasi')->first();
+
+    Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat1->id,
+        'amount'      => 2000000,
+        'month'       => 8,
+        'year'        => 2026,
+    ]);
+    Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat2->id,
+        'amount'      => 500000,
+        'month'       => 8,
+        'year'        => 2026,
+    ]);
+
+    // Target month: September 2026
+    $response = $this->postJson('/api/v1/budgets/copy-previous', [
+        'month' => 9,
+        'year'  => 2026,
+    ]);
+
+    $response->assertStatus(201)
+        ->assertJsonPath('status', 'success')
+        ->assertJsonPath('data.count', 2)
+        ->assertJsonPath('data.from_month', 8)
+        ->assertJsonPath('data.to_month', 9);
+
+    expect(Budget::where('user_id', $user->id)->where('month', 9)->where('year', 2026)->count())->toBe(2);
+});
+
+test('api copy previous returns 422 if previous month has no budgets', function () {
+    $user = User::factory()->create();
+    Sanctum::actingAs($user);
+
+    $response = $this->postJson('/api/v1/budgets/copy-previous', [
+        'month' => 9,
+        'year'  => 2026,
+    ]);
+
+    $response->assertStatus(422)
+        ->assertJsonPath('status', 'error');
+});
+
+test('api copy previous handles year rollover from January to previous December', function () {
+    $user = User::factory()->create();
+    Sanctum::actingAs($user);
+
+    $cat = Category::where('name', 'Makanan & Minuman')->first();
+
+    // Create budget for December 2025
+    Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat->id,
+        'amount'      => 2500000,
+        'month'       => 12,
+        'year'        => 2025,
+    ]);
+
+    // Copy to January 2026
+    $response = $this->postJson('/api/v1/budgets/copy-previous', [
+        'month' => 1,
+        'year'  => 2026,
+    ]);
+
+    $response->assertStatus(201)
+        ->assertJsonPath('data.from_month', 12)
+        ->assertJsonPath('data.from_year', 2025)
+        ->assertJsonPath('data.to_month', 1)
+        ->assertJsonPath('data.to_year', 2026);
+
+    $this->assertDatabaseHas('budgets', [
+        'user_id'     => $user->id,
+        'category_id' => $cat->id,
+        'amount'      => 2500000,
+        'month'       => 1,
+        'year'        => 2026,
+    ]);
+});
+
+test('upsertBudget restores soft deleted budget without unique constraint error', function () {
+    $user = User::factory()->create();
+    $cat = Category::where('name', 'Makanan & Minuman')->first();
+
+    // 1. Create a budget
+    $budget = Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat->id,
+        'amount'      => 1000000,
+        'month'       => 10,
+        'year'        => 2026,
+    ]);
+
+    // 2. Soft delete it
+    $budget->delete();
+    expect($budget->trashed())->toBeTrue();
+    $this->assertSoftDeleted('budgets', ['id' => $budget->id]);
+
+    // 3. Upsert budget again for the same category, month, and year (new amount)
+    $restored = Budget::upsertBudget($user->id, $cat->id, 10, 2026, 1250000);
+
+    // 4. Must be restored, same ID, updated amount, not duplicate row
+    expect($restored->id)->toBe($budget->id)
+        ->and($restored->trashed())->toBeFalse()
+        ->and((float) $restored->amount)->toBe(1250000.0);
+
+    expect(Budget::where('user_id', $user->id)->where('month', 10)->where('year', 2026)->count())->toBe(1);
+    expect(Budget::withTrashed()->where('user_id', $user->id)->where('month', 10)->where('year', 2026)->count())->toBe(1);
+});
+
+test('recordMultipleBudgets restores soft deleted budgets when user re-assigns via AI Assistant or batch', function () {
+    $user = User::factory()->create();
+    $cat1 = Category::where('name', 'Makanan & Minuman')->first();
+    $cat2 = Category::where('name', 'Transportasi')->first();
+
+    // Create and soft delete both budgets in month 10
+    $b1 = Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat1->id,
+        'amount'      => 1000000,
+        'month'       => 10,
+        'year'        => 2026,
+    ]);
+    $b2 = Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat2->id,
+        'amount'      => 500000,
+        'month'       => 10,
+        'year'        => 2026,
+    ]);
+
+    $b1->delete();
+    $b2->delete();
+
+    // Call recordMultipleBudgets (as called by AI Assistant saveBudget)
+    $budgetService = app(\App\Services\BudgetService::class);
+    $result = $budgetService->recordMultipleBudgets($user, [
+        ['category_id' => $cat1->id, 'amount' => 1100000, 'month' => 10, 'year' => 2026],
+        ['category_id' => $cat2->id, 'amount' => 600000, 'month' => 10, 'year' => 2026],
+    ]);
+
+    expect($result['success'])->toBeTrue()
+        ->and($result['count'])->toBe(2)
+        ->and($result['total_amount'])->toBe(1700000.0);
+
+    // Verify both are restored and active
+    expect(Budget::where('user_id', $user->id)->where('month', 10)->where('year', 2026)->count())->toBe(2);
+});
+
+test('web and api budget store gracefully restores soft deleted budget', function () {
+    $user = User::factory()->create();
+    $cat = Category::where('name', 'Makanan & Minuman')->first();
+
+    $budget = Budget::create([
+        'user_id'     => $user->id,
+        'category_id' => $cat->id,
+        'amount'      => 800000,
+        'month'       => 10,
+        'year'        => 2026,
+    ]);
+    $budget->delete();
+
+    // Store via Web
+    $response = $this->actingAs($user)->post('/anggaran/store', [
+        'category_id' => $cat->id,
+        'amount'      => 950000,
+        'month'       => 10,
+        'year'        => 2026,
+    ]);
+    $response->assertRedirect('/anggaran?month=10&year=2026');
+
+    $budget->refresh();
+    expect($budget->trashed())->toBeFalse()
+        ->and((float) $budget->amount)->toBe(950000.0);
+});
+
+

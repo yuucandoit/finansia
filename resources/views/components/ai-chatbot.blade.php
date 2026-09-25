@@ -1,15 +1,35 @@
+<style>
+    #ai-chat-messages::-webkit-scrollbar,
+    #ai-chatbot-window .overflow-y-auto::-webkit-scrollbar {
+        width: 5px;
+    }
+    #ai-chat-messages::-webkit-scrollbar-track,
+    #ai-chatbot-window .overflow-y-auto::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    #ai-chat-messages::-webkit-scrollbar-thumb,
+    #ai-chatbot-window .overflow-y-auto::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1;
+        border-radius: 9999px;
+    }
+    #ai-chat-messages::-webkit-scrollbar-thumb:hover,
+    #ai-chatbot-window .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+        background-color: #94a3b8;
+    }
+</style>
+
 <div id="ai-chatbot-container" class="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-50 flex flex-col items-end font-sans max-w-[calc(100vw-24px)]">
 
     <!-- Chat Window Card -->
     <div id="ai-chatbot-window" 
-         class="hidden w-[calc(100vw-24px)] sm:w-[410px] max-w-[410px] max-h-[85vh] sm:max-h-[640px] bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col transition-all duration-300 transform origin-bottom-right">
+         class="hidden w-[calc(100vw-24px)] sm:w-[430px] max-w-[430px] max-h-[85vh] sm:max-h-[650px] bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-200/90 overflow-hidden flex flex-col transition-all duration-300 transform origin-bottom-right">
         
         <!-- Chat Header -->
-        <div class="bg-[#234066] px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between text-white select-none shadow-sm">
+        <div class="bg-gradient-to-r from-[#1c3454] to-[#234066] px-4 sm:px-5 py-3.5 flex items-center justify-between text-white select-none shadow-sm">
             <div class="flex items-center gap-3">
                 <!-- Bot Avatar Icon -->
-                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white flex items-center justify-center shadow-sm flex-shrink-0">
-                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-[#234066]" viewBox="0 0 24 24" fill="currentColor">
+                <div class="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-white/10 backdrop-blur-xs flex items-center justify-center shadow-xs flex-shrink-0 border border-white/20">
+                    <svg class="w-5 h-5 sm:w-6 sm:h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
                         <circle cx="12" cy="4" r="1.5" />
                         <path d="M12 5.5v1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                         <rect x="5" y="7" width="14" height="11" rx="4" />
@@ -18,12 +38,11 @@
                         <circle cx="9" cy="12" r="0.8" fill="#234066" />
                         <circle cx="15" cy="12" r="0.8" fill="#234066" />
                         <path d="M10 15h4" stroke="white" stroke-width="1.5" stroke-linecap="round" />
-                        <path d="M3.5 11a1.5 1.5 0 0 1 1.5-1.5v5A1.5 1.5 0 0 1 3.5 13v-2zM19 9.5a1.5 1.5 0 0 1 1.5 1.5v2a1.5 1.5 0 0 1-1.5 1.5v-5z" />
                     </svg>
                 </div>
                 <div>
-                    <h3 class="font-bold text-sm sm:text-base tracking-wide text-white">Asisten AI - Finansia</h3>
-                    <p class="text-[10px] sm:text-[11px] text-blue-200 flex items-center gap-1.5">
+                    <h3 class="font-bold text-sm sm:text-base tracking-tight text-white leading-tight">Asisten Finansial AI</h3>
+                    <p class="text-[10px] sm:text-[11px] text-blue-200/90 flex items-center gap-1.5 mt-0.5">
                         <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
                         Online • Siap mencatat & mengatur
                     </p>
@@ -31,73 +50,96 @@
             </div>
 
             <!-- Header Actions -->
-            <button type="button" 
-                    onclick="toggleAiChatbot()" 
-                    class="text-white/80 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-colors"
-                    title="Tutup / Minimize">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
-            </button>
+            <div class="flex items-center gap-1">
+                <button type="button" 
+                        onclick="resetAiChat()" 
+                        class="text-white/70 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors"
+                        title="Mulai percakapan baru / Reset">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                </button>
+                <button type="button" 
+                        onclick="toggleAiChatbot()" 
+                        class="text-white/80 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors"
+                        title="Tutup / Minimize">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                </button>
+            </div>
         </div>
 
         <!-- Chat Messages Container -->
-        <div id="ai-chat-messages" class="p-3 sm:p-4 space-y-3 sm:space-y-4 bg-slate-50/50 flex-1 max-h-[52vh] sm:max-h-[460px] min-h-[280px] overflow-y-auto scroll-smooth">
+        <div id="ai-chat-messages" class="p-3.5 sm:p-4 space-y-3 sm:space-y-3.5 bg-slate-50/70 flex-1 max-h-[54vh] sm:max-h-[470px] min-h-[300px] overflow-y-auto scroll-smooth">
             
             <!-- Greeting Message -->
             <div class="flex justify-start gap-2.5 items-start">
-                <div class="w-7 h-7 rounded-full bg-[#234066] text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
+                <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#1b3252] to-[#2e5283] text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
                     <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
                         <circle cx="12" cy="4" r="1.5" />
                         <rect x="5" y="7" width="14" height="11" rx="4" />
                     </svg>
                 </div>
-                <div class="bg-white text-gray-800 text-sm px-4 py-3 rounded-2xl rounded-tl-xs max-w-[88%] leading-relaxed border border-gray-200/70 shadow-xs">
-                    <p class="font-semibold text-gray-900">Halo! Ada yang bisa saya bantu catat hari ini? 😊</p>
-                    <p class="text-xs text-gray-500 mt-2 leading-relaxed">
-                        Anda bisa catat transaksi atau atur anggaran (bisa beberapa sekaligus!), contoh:
+                <div class="bg-white text-gray-800 text-sm px-4 py-3 rounded-2xl rounded-tl-xs max-w-[88%] leading-relaxed border border-gray-200/70 shadow-xs space-y-1">
+                    <p class="font-bold text-gray-900">Halo! Ada yang ingin dicatat hari ini? 😊</p>
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        Anda bisa catat transaksi harian atau atur anggaran bulanan secara santai (bisa beberapa sekaligus).
                     </p>
-                    <div class="mt-2.5 space-y-1.5 text-xs text-blue-700 font-medium">
-                        <div class="cursor-pointer hover:underline bg-blue-50/70 px-2.5 py-1.5 rounded-lg transition" onclick="quickFillInput(this.innerText)">
-                            "Atur anggaran bayar kos 1.5jt dan sedekah 200rb"
-                        </div>
-                        <div class="cursor-pointer hover:underline bg-blue-50/70 px-2.5 py-1.5 rounded-lg transition" onclick="quickFillInput(this.innerText)">
-                            "Beli kopi 25k dan bensin 30k pake BCA"
-                        </div>
-                        <div class="cursor-pointer hover:underline bg-blue-50/70 px-2.5 py-1.5 rounded-lg transition" onclick="quickFillInput(this.innerText)">
-                            "Bulan ini jajan makan udah habis berapa?"
-                        </div>
-                        <div class="cursor-pointer hover:underline bg-blue-50/70 px-2.5 py-1.5 rounded-lg transition" onclick="quickFillInput(this.innerText)">
-                            "Gaji masuk 5jt ke Mandiri"
-                        </div>
-                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Suggestions (Hidden once conversation starts) -->
+            <div id="ai-quick-suggestions" class="space-y-1.5 pt-1">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">💡 Contoh Cepat</p>
+                <div class="grid grid-cols-1 gap-1.5 text-xs text-slate-700">
+                    <button type="button" 
+                            class="text-left bg-white hover:bg-blue-50/80 border border-gray-200/80 hover:border-blue-300 px-3 py-2 rounded-xl transition shadow-2xs group flex items-center justify-between" 
+                            onclick="quickFillInput(this.dataset.prompt)" 
+                            data-prompt="Atur anggaran bayar kos 1.5jt dan sedekah 200rb">
+                        <span class="truncate">🎯 Atur anggaran bayar kos 1.5jt & sedekah 200rb</span>
+                        <span class="text-blue-600 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Pakai →</span>
+                    </button>
+                    <button type="button" 
+                            class="text-left bg-white hover:bg-blue-50/80 border border-gray-200/80 hover:border-blue-300 px-3 py-2 rounded-xl transition shadow-2xs group flex items-center justify-between" 
+                            onclick="quickFillInput(this.dataset.prompt)" 
+                            data-prompt="Beli kopi 25k dan bensin 30k pake BCA">
+                        <span class="truncate">☕ Beli kopi 25k & bensin 30k pake BCA</span>
+                        <span class="text-blue-600 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Pakai →</span>
+                    </button>
+                    <button type="button" 
+                            class="text-left bg-white hover:bg-blue-50/80 border border-gray-200/80 hover:border-blue-300 px-3 py-2 rounded-xl transition shadow-2xs group flex items-center justify-between" 
+                            onclick="quickFillInput(this.dataset.prompt)" 
+                            data-prompt="Bulan ini jajan makan udah habis berapa?">
+                        <span class="truncate">📊 Bulan ini jajan makan udah habis berapa?</span>
+                        <span class="text-blue-600 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Pakai →</span>
+                    </button>
                 </div>
             </div>
 
         </div>
 
         <!-- Chat Input Form -->
-        <div class="p-3 bg-white border-t border-gray-100">
-            <form id="ai-chatbot-form" onsubmit="handleAiChatSubmit(event)" class="flex items-end gap-2">
-                <div class="relative flex-1">
-                    <textarea 
-                           id="ai-chatbot-input" 
-                           rows="1"
-                           placeholder="Ketik transaksi atau anggaran di sini..." 
-                           class="w-full border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-[#234066]/20 focus:border-[#234066] transition-all bg-white placeholder:text-gray-400 resize-none max-h-32 min-h-[42px] leading-relaxed scroll-smooth"></textarea>
-                </div>
+        <div class="p-3 sm:p-3.5 bg-white border-t border-gray-100">
+            <form id="ai-chatbot-form" onsubmit="handleAiChatSubmit(event)" class="relative flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-2xl p-1.5 focus-within:border-[#234066] focus-within:bg-white focus-within:ring-2 focus-within:ring-[#234066]/10 transition-all">
+                <textarea 
+                       id="ai-chatbot-input" 
+                       rows="1"
+                       placeholder="Ketik transaksi atau anggaran..." 
+                       class="flex-1 bg-transparent border-0 px-2.5 py-1.5 text-sm text-gray-800 outline-none placeholder:text-gray-400 resize-none max-h-32 min-h-[38px] leading-relaxed scroll-smooth"></textarea>
+                
                 <button type="submit" 
                         id="ai-chatbot-send-btn"
-                        class="p-2.5 mb-0.5 text-white bg-[#234066] hover:bg-[#1a304e] rounded-xl transition-all flex items-center justify-center flex-shrink-0 disabled:opacity-50 shadow-sm"
-                        title="Kirim pesan (atau Ctrl+Enter)">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 rotate-45 -translate-y-0.5 translate-x-0.5">
+                        class="w-9 h-9 text-white bg-[#234066] hover:bg-[#1a304e] rounded-xl transition-all flex items-center justify-center flex-shrink-0 disabled:opacity-40 shadow-xs active:scale-95"
+                        title="Kirim pesan (Ctrl+Enter)">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4 rotate-45 -translate-y-0.5 translate-x-0.5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
                     </svg>
                 </button>
             </form>
-            <div class="flex items-center justify-between px-1 mt-1.5 text-[10px] text-gray-400 select-none">
-                <span>Enter = baris baru</span>
-                <span>Kirim via tombol atau Ctrl+Enter</span>
+            <div class="flex items-center justify-between px-2 mt-1.5 text-[10px] text-gray-400 select-none">
+                <span><kbd class="px-1 py-0.5 bg-gray-100 border border-gray-200 rounded text-[9px] font-sans text-gray-500">Enter</kbd> baris baru</span>
+                <span><kbd class="px-1 py-0.5 bg-gray-100 border border-gray-200 rounded text-[9px] font-sans text-gray-500">Ctrl</kbd>+<kbd class="px-1 py-0.5 bg-gray-100 border border-gray-200 rounded text-[9px] font-sans text-gray-500">Enter</kbd> kirim</span>
             </div>
         </div>
 
@@ -107,7 +149,7 @@
     <button id="ai-chatbot-trigger" 
             type="button"
             onclick="toggleAiChatbot()" 
-            class="bg-[#234066] hover:bg-[#1a304e] text-white p-3.5 rounded-full shadow-2xl hover:shadow-blue-900/30 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center gap-2.5 group">
+            class="bg-[#234066] hover:bg-[#1a304e] text-white p-3 sm:p-3.5 rounded-full shadow-2xl hover:shadow-blue-900/30 hover:scale-105 active:scale-95 transition-all duration-200 flex items-center gap-2.5 group">
         <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center flex-shrink-0 shadow-xs">
             <svg class="w-5 h-5 text-[#234066]" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="4" r="1.5" />
@@ -179,9 +221,69 @@
     function quickFillInput(text) {
         const input = document.getElementById('ai-chatbot-input');
         if (input) {
-            input.value = text.replace(/["']/g, '');
+            input.value = text.replace(/^["'\s]+|["'\s]+$/g, '');
             input.style.height = 'auto';
             input.style.height = Math.min(input.scrollHeight, 128) + 'px';
+            input.focus();
+        }
+    }
+
+    function resetAiChat() {
+        if (!confirm('Bersihkan percakapan ini dan mulai dari awal?')) return;
+        const container = document.getElementById('ai-chat-messages');
+        if (!container) return;
+
+        container.innerHTML = `
+            <!-- Greeting Message -->
+            <div class="flex justify-start gap-2.5 items-start">
+                <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#1b3252] to-[#2e5283] text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
+                    <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="4" r="1.5" />
+                        <rect x="5" y="7" width="14" height="11" rx="4" />
+                    </svg>
+                </div>
+                <div class="bg-white text-gray-800 text-sm px-4 py-3 rounded-2xl rounded-tl-xs max-w-[88%] leading-relaxed border border-gray-200/70 shadow-xs space-y-1">
+                    <p class="font-bold text-gray-900">Halo! Ada yang ingin dicatat hari ini? 😊</p>
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                        Anda bisa catat transaksi harian atau atur anggaran bulanan secara santai (bisa beberapa sekaligus).
+                    </p>
+                </div>
+            </div>
+
+            <!-- Quick Suggestions -->
+            <div id="ai-quick-suggestions" class="space-y-1.5 pt-1">
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-1">💡 Contoh Cepat</p>
+                <div class="grid grid-cols-1 gap-1.5 text-xs text-slate-700">
+                    <button type="button" 
+                            class="text-left bg-white hover:bg-blue-50/80 border border-gray-200/80 hover:border-blue-300 px-3 py-2 rounded-xl transition shadow-2xs group flex items-center justify-between" 
+                            onclick="quickFillInput(this.dataset.prompt)" 
+                            data-prompt="Atur anggaran bayar kos 1.5jt dan sedekah 200rb">
+                        <span class="truncate">🎯 Atur anggaran bayar kos 1.5jt & sedekah 200rb</span>
+                        <span class="text-blue-600 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Pakai →</span>
+                    </button>
+                    <button type="button" 
+                            class="text-left bg-white hover:bg-blue-50/80 border border-gray-200/80 hover:border-blue-300 px-3 py-2 rounded-xl transition shadow-2xs group flex items-center justify-between" 
+                            onclick="quickFillInput(this.dataset.prompt)" 
+                            data-prompt="Beli kopi 25k dan bensin 30k pake BCA">
+                        <span class="truncate">☕ Beli kopi 25k & bensin 30k pake BCA</span>
+                        <span class="text-blue-600 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Pakai →</span>
+                    </button>
+                    <button type="button" 
+                            class="text-left bg-white hover:bg-blue-50/80 border border-gray-200/80 hover:border-blue-300 px-3 py-2 rounded-xl transition shadow-2xs group flex items-center justify-between" 
+                            onclick="quickFillInput(this.dataset.prompt)" 
+                            data-prompt="Bulan ini jajan makan udah habis berapa?">
+                        <span class="truncate">📊 Bulan ini jajan makan udah habis berapa?</span>
+                        <span class="text-blue-600 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity">Pakai →</span>
+                    </button>
+                </div>
+            </div>
+        `;
+
+        window.aiPendingTransactions = {};
+        window.aiPendingBudgets = {};
+        const input = document.getElementById('ai-chatbot-input');
+        if (input) {
+            input.value = '';
             input.focus();
         }
     }
@@ -196,12 +298,15 @@
 
         const userText = input.value.trim();
 
+        // Sembunyikan saran cepat ketika percakapan sudah dimulai agar ruang chat lega
+        document.getElementById('ai-quick-suggestions')?.classList.add('hidden');
+
         const userBubble = document.createElement('div');
-        userBubble.className = 'flex justify-end';
+        userBubble.className = 'flex justify-end animate-fade-in';
         const formattedUserText = escapeHtml(userText).replace(/\n/g, '<br>');
         userBubble.innerHTML = `
-            <div class="bg-[#eef5fc] text-gray-800 text-sm font-medium px-4 py-3 rounded-2xl rounded-tr-xs max-w-[85%] border border-blue-100 shadow-2xs leading-relaxed whitespace-pre-wrap">
-                You: "${formattedUserText}"
+            <div class="bg-[#234066] text-white text-sm font-medium px-4 py-2.5 rounded-2xl rounded-tr-xs max-w-[85%] shadow-xs leading-relaxed whitespace-pre-line break-words">
+                ${formattedUserText}
             </div>
         `;
         messageContainer.appendChild(userBubble);
@@ -359,15 +464,15 @@
             <div id="actions-${cardId}" class="flex items-center gap-2 pt-1">
                 <button type="button" 
                         onclick="cancelTransaction('${cardId}')"
-                        class="px-3.5 py-2 bg-white border border-gray-400 hover:border-gray-600 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-xl transition-all">
-                    [Batal]
+                        class="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 text-xs font-semibold rounded-xl transition-all">
+                    Batal
                 </button>
                 <button type="button" 
                         id="btn-confirm-${cardId}"
                         onclick="confirmAndSaveTransaction('${cardId}')"
                         ${isInsufficient ? 'disabled' : ''}
-                        class="flex-1 px-4 py-2 bg-[#234066] hover:bg-[#1a304e] text-white text-xs font-semibold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-1.5 ${isInsufficient ? 'opacity-50 cursor-not-allowed' : ''}">
-                    <span>[Konfirmasi & Simpan]</span>
+                        class="flex-1 px-4 py-2.5 bg-[#234066] hover:bg-[#1a304e] text-white text-xs font-bold rounded-xl shadow-sm transition-all text-center flex items-center justify-center gap-1.5 ${isInsufficient ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.01] active:scale-[0.99]'}">
+                    <span>✓ Konfirmasi & Simpan</span>
                 </button>
             </div>
         `;
@@ -450,13 +555,13 @@
                 <div id="actions-${cardId}" class="flex items-center gap-2 pt-1">
                     <button type="button" 
                             onclick="cancelTransaction('${cardId}')"
-                            class="px-3.5 py-2 bg-white border border-gray-400 hover:border-gray-600 text-gray-700 text-xs font-semibold rounded-xl transition-all">
-                        [Batal]
+                            class="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 text-xs font-semibold rounded-xl transition-all">
+                        Batal
                     </button>
                     <button type="button" 
                             onclick="confirmAndSaveMultipleTransactions('${cardId}')"
-                            class="flex-1 px-4 py-2 bg-[#234066] hover:bg-[#1a304e] text-white text-xs font-bold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-1.5">
-                        <span>💾 Simpan Semua (${data.items.length} Transaksi)</span>
+                            class="flex-1 px-4 py-2.5 bg-[#234066] hover:bg-[#1a304e] text-white text-xs font-bold rounded-xl shadow-sm transition-all text-center flex items-center justify-center gap-1.5 hover:scale-[1.01] active:scale-[0.99]">
+                        <span>✓ Simpan Semua (${data.items.length} Transaksi)</span>
                     </button>
                 </div>
             </div>
@@ -557,12 +662,14 @@
             itemsHtml += `
                 <div class="p-2.5 bg-blue-50/60 border border-blue-100 rounded-xl space-y-1 text-xs">
                     <div class="flex items-center justify-between">
-                        <span class="font-bold text-gray-900">🎯 ${escapeHtml(item.category_name)}</span>
+                        <span class="font-bold text-gray-900">🎯 ${escapeHtml(item.name || item.category_name)}</span>
                         <span class="font-extrabold text-[#234066]">${escapeHtml(item.amount_formatted)}</span>
                     </div>
                     <div class="flex items-center justify-between text-[11px] text-gray-500">
+                        <span class="inline-flex items-center gap-1 font-semibold text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded text-[10px]">
+                            📁 ${escapeHtml(item.category_name)}
+                        </span>
                         <span>Periode: ${escapeHtml(item.month_name)} ${escapeHtml(item.year)}</span>
-                        <span class="text-blue-700 font-semibold">Batas Kebutuhan</span>
                     </div>
                 </div>
             `;
@@ -584,7 +691,7 @@
                 </div>
 
                 <p class="text-[11px] text-gray-400 italic">
-                    Anggaran kebutuhan ini akan otomatis mengontrol pengeluaran riil Anda.
+                    Setiap anggaran pos ini otomatis terhubung ke kategori standar dan mengontrol pengeluaran riil Anda.
                 </p>
 
                 <hr class="border-gray-200 my-2">
@@ -592,13 +699,13 @@
                 <div id="actions-${cardId}" class="flex items-center gap-2 pt-1">
                     <button type="button" 
                             onclick="cancelBudget('${cardId}')"
-                            class="px-3.5 py-2 bg-white border border-gray-400 hover:border-gray-600 text-gray-700 text-xs font-semibold rounded-xl transition-all">
-                        [Batal]
+                            class="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 text-xs font-semibold rounded-xl transition-all">
+                        Batal
                     </button>
                     <button type="button" 
                             onclick="confirmAndSaveBudgets('${cardId}')"
-                            class="flex-1 px-4 py-2 bg-[#234066] hover:bg-[#1a304e] text-white text-xs font-bold rounded-xl shadow-md transition-all text-center flex items-center justify-center gap-1.5">
-                        <span>🎯 Simpan Anggaran Kebutuhan</span>
+                            class="flex-1 px-4 py-2.5 bg-[#234066] hover:bg-[#1a304e] text-white text-xs font-bold rounded-xl shadow-sm transition-all text-center flex items-center justify-center gap-1.5 hover:scale-[1.01] active:scale-[0.99]">
+                        <span>🎯 Simpan Anggaran (${items.length} Kebutuhan)</span>
                     </button>
                 </div>
             </div>
@@ -643,6 +750,7 @@
 
         const payload = data.items.length === 1
             ? {
+                name: data.items[0].name || data.items[0].category_name,
                 category_id: data.items[0].category_id,
                 amount: data.items[0].amount,
                 month: data.items[0].month,
@@ -650,6 +758,7 @@
             }
             : {
                 items: data.items.map(it => ({
+                    name: it.name || it.category_name,
                     category_id: it.category_id,
                     amount: it.amount,
                     month: it.month,
@@ -842,17 +951,17 @@
 
     function renderBotTextReply(text, container) {
         const replyEl = document.createElement('div');
-        replyEl.className = 'flex justify-start gap-2.5 items-start';
+        replyEl.className = 'flex justify-start gap-2.5 items-start animate-fade-in';
         const formattedContent = formatChatText(text);
 
         replyEl.innerHTML = `
-            <div class="w-7 h-7 rounded-full bg-[#234066] text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
+            <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#1b3252] to-[#2e5283] text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
                 <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
                     <circle cx="12" cy="4" r="1.5" />
                     <rect x="5" y="7" width="14" height="11" rx="4" />
                 </svg>
             </div>
-            <div class="bg-white text-gray-800 text-sm px-4 py-2.5 rounded-2xl rounded-tl-xs max-w-[85%] border border-gray-200/70 shadow-xs leading-relaxed">
+            <div class="bg-white text-gray-800 text-sm px-4 py-3 rounded-2xl rounded-tl-xs max-w-[85%] border border-gray-200/70 shadow-xs leading-relaxed break-words space-y-1">
                 ${formattedContent}
             </div>
         `;
@@ -861,14 +970,14 @@
 
     function renderBotSuccessReply(html, container) {
         const replyEl = document.createElement('div');
-        replyEl.className = 'flex justify-start gap-2.5 items-start';
+        replyEl.className = 'flex justify-start gap-2.5 items-start animate-fade-in';
         replyEl.innerHTML = `
-            <div class="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
+            <div class="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 text-xs shadow-xs mt-0.5">
                 <svg class="w-4 h-4 text-white" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                 </svg>
             </div>
-            <div class="bg-emerald-50/90 text-emerald-950 text-sm px-4 py-3 rounded-2xl rounded-tl-xs max-w-[85%] border border-emerald-200/80 shadow-xs leading-relaxed">
+            <div class="bg-emerald-50/90 text-emerald-950 text-sm px-4 py-3 rounded-2xl rounded-tl-xs max-w-[85%] border border-emerald-200/80 shadow-xs leading-relaxed break-words space-y-1">
                 ${html}
             </div>
         `;

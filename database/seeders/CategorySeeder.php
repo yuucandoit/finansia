@@ -51,6 +51,30 @@ class CategorySeeder extends Seeder
                 'color' => 'red',
             ],
             [
+                'name' => 'Tempat Tinggal',
+                'type' => 'Cash Out',
+                'icon' => 'fa-house',
+                'color' => 'indigo',
+            ],
+            [
+                'name' => 'Keluarga & Sedekah',
+                'type' => 'Cash Out',
+                'icon' => 'fa-hand-holding-heart',
+                'color' => 'emerald',
+            ],
+            [
+                'name' => 'Tabungan & Investasi',
+                'type' => 'Cash Out',
+                'icon' => 'fa-piggy-bank',
+                'color' => 'teal',
+            ],
+            [
+                'name' => 'Pendidikan',
+                'type' => 'Cash Out',
+                'icon' => 'fa-graduation-cap',
+                'color' => 'blue',
+            ],
+            [
                 'name' => 'Lainnya',
                 'type' => 'Cash Out',
                 'icon' => 'fa-ellipsis-h',

@@ -54,11 +54,9 @@ class BudgetController extends Controller
             $overallStatus = 'warning';
         }
 
-        // Kategori pengeluaran yang belum dianggarkan
-        $budgetedCategoryIds = $budgets->pluck('category_id')->toArray();
+        // Kategori pengeluaran yang tersedia
         $availableCategories = Category::forUser($userId)
             ->where('type', 'Cash Out')
-            ->whereNotIn('id', $budgetedCategoryIds)
             ->orderBy('name')
             ->get(['id', 'name', 'icon', 'color', 'type']);
 
@@ -99,6 +97,7 @@ class BudgetController extends Controller
         $userId = $request->user()->id;
 
         $validator = Validator::make($request->all(), [
+            'name'          => ['nullable', 'string', 'max:100'],
             'category_id'   => ['nullable'],
             'category_name' => ['nullable', 'string', 'max:50'],
             'kebutuhan'     => ['nullable', 'string', 'max:50'],
@@ -117,27 +116,36 @@ class BudgetController extends Controller
         }
 
         $validated = $validator->validated();
-        $kebutuhanName = trim($validated['kebutuhan'] ?? $validated['category_name'] ?? '');
+        $name = trim($validated['name'] ?? $validated['kebutuhan'] ?? $validated['category_name'] ?? '');
+        $categoryId = !empty($validated['category_id']) && is_numeric($validated['category_id']) ? (int) $validated['category_id'] : null;
 
-        if (!empty($kebutuhanName)) {
-            $cat = Category::findOrCreateKebutuhan($kebutuhanName, $userId);
-            $categoryId = $cat->id;
-        } elseif (!empty($validated['category_id']) && is_numeric($validated['category_id'])) {
-            $categoryId = (int) $validated['category_id'];
-        } else {
-            return $this->errorResponse('Validasi gagal', 422, ['category_id' => ['Kategori atau nama kebutuhan wajib diisi.']]);
+        if (!$name && !$categoryId) {
+            return $this->errorResponse('Validasi gagal', 422, ['name' => ['Nama kebutuhan atau kategori anggaran wajib diisi.']]);
         }
 
-        $budget = Budget::updateOrCreate(
-            [
-                'user_id'     => $userId,
-                'category_id' => $categoryId,
-                'month'       => $validated['month'],
-                'year'        => $validated['year'],
-            ],
-            [
-                'amount' => $validated['amount'],
-            ]
+        $budgetService = app(\App\Services\BudgetService::class);
+        if (!$categoryId) {
+            $cat = $budgetService->resolveCategory($name, $userId);
+            $categoryId = $cat ? $cat->id : null;
+        }
+
+        if (!$categoryId) {
+            $cat = Category::where('name', 'Lainnya')->where('type', 'Cash Out')->first() ?: Category::where('type', 'Cash Out')->first();
+            $categoryId = $cat->id;
+        }
+
+        if ($name === '') {
+            $cat = Category::find($categoryId);
+            $name = $cat ? $cat->name : 'Anggaran';
+        }
+
+        $budget = Budget::upsertBudget(
+            $userId,
+            $name,
+            $categoryId,
+            (int) $validated['month'],
+            (int) $validated['year'],
+            (float) $validated['amount']
         );
 
         $budget->load('category');
@@ -183,6 +191,38 @@ class BudgetController extends Controller
     }
 
     /**
+     * Menyalin seluruh anggaran kebutuhan dari bulan sebelumnya ke bulan target.
+     */
+    public function copyPrevious(Request $request, \App\Services\BudgetService $budgetService): JsonResponse
+    {
+        $targetMonth = (int) $request->input('month', now()->month);
+        $targetYear  = (int) $request->input('year', now()->year);
+
+        if ($targetMonth < 1 || $targetMonth > 12) {
+            $targetMonth = (int) now()->month;
+        }
+        if ($targetYear < 2020 || $targetYear > 2099) {
+            $targetYear = (int) now()->year;
+        }
+
+        try {
+            $result = $budgetService->copyPreviousMonthBudgets($request->user(), $targetMonth, $targetYear);
+            return $this->successResponse([
+                'count'      => $result['count'],
+                'from_month' => $result['from_month'],
+                'from_year'  => $result['from_year'],
+                'to_month'   => $result['to_month'],
+                'to_year'    => $result['to_year'],
+                'budgets'    => collect($result['budgets'])->map(fn($b) => $this->formatBudget($b)),
+            ], "Berhasil menyalin {$result['count']} anggaran kebutuhan dari bulan sebelumnya!", 201);
+        } catch (\InvalidArgumentException $e) {
+            return $this->errorResponse($e->getMessage(), 422);
+        } catch (\Exception $e) {
+            return $this->errorResponse('Gagal menyalin anggaran: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Menampilkan detail satu anggaran kategori.
      */
     public function show(Request $request, int $id): JsonResponse
@@ -217,7 +257,9 @@ class BudgetController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'amount' => ['required', 'numeric', 'min:1000'],
+            'name'        => ['nullable', 'string', 'max:100'],
+            'category_id' => ['nullable', 'exists:categories,id'],
+            'amount'      => ['required', 'numeric', 'min:1000'],
         ], [
             'amount.required' => 'Nominal anggaran wajib diisi.',
             'amount.min'      => 'Nominal anggaran minimal Rp 1.000.',
@@ -227,10 +269,15 @@ class BudgetController extends Controller
             return $this->errorResponse('Validasi gagal', 422, $validator->errors());
         }
 
-        $budget->update([
-            'amount' => $request->input('amount'),
-        ]);
+        $updateData = ['amount' => $request->input('amount')];
+        if ($request->has('name') && !empty($request->input('name'))) {
+            $updateData['name'] = trim($request->input('name'));
+        }
+        if ($request->has('category_id') && !empty($request->input('category_id'))) {
+            $updateData['category_id'] = (int) $request->input('category_id');
+        }
 
+        $budget->update($updateData);
         $budget->load('category');
 
         return $this->successResponse(
@@ -270,6 +317,7 @@ class BudgetController extends Controller
 
         return [
             'id'                  => $b->id,
+            'name'                => $b->name,
             'category_id'         => $b->category_id,
             'month'               => $b->month,
             'year'                => $b->year,

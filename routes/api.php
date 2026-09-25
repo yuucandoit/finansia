@@ -64,6 +64,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/budgets', [BudgetController::class, 'index']);
         Route::post('/budgets', [BudgetController::class, 'store']);
         Route::post('/budgets/batch', [BudgetController::class, 'batchStore']);
+        Route::post('/budgets/copy-previous', [BudgetController::class, 'copyPrevious']);
         Route::get('/budgets/{id}', [BudgetController::class, 'show']);
         Route::put('/budgets/{id}', [BudgetController::class, 'update']);
         Route::delete('/budgets/{id}', [BudgetController::class, 'destroy']);

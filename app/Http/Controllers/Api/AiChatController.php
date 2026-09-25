@@ -74,22 +74,23 @@ class AiChatController extends Controller
                 if ($month < 1 || $month > 12) $month = (int) now()->month;
                 if ($year < 2020 || $year > 2099) $year = (int) now()->year;
 
-                $extractedCatName = strtolower(trim($item['category'] ?? ''));
-                $matchedCategory = null;
+                // Tentukan nama pos kebutuhan spesifik
+                $budgetName = trim($item['name'] ?? $item['kebutuhan'] ?? $item['title'] ?? '');
+                $extractedCatName = trim($item['category'] ?? '');
 
-                foreach ($categories as $category) {
-                    $catNameLower = strtolower($category->name);
-                    if (str_contains($extractedCatName, $catNameLower) || str_contains($catNameLower, $extractedCatName)) {
-                        $matchedCategory = $category;
-                        break;
-                    }
-                }
+                $budgetService = app(\App\Services\BudgetService::class);
+                $matchedCategory = $budgetService->resolveCategory($extractedCatName ?: $budgetName, $user->id);
 
                 if (!$matchedCategory) {
                     $matchedCategory = $categories->firstWhere('type', 'Cash Out') ?? $categories->first();
                 }
 
+                if ($budgetName === '') {
+                    $budgetName = $extractedCatName ?: ($matchedCategory ? $matchedCategory->name : 'Anggaran');
+                }
+
                 $preparedBudgets[] = [
+                    'name'             => $budgetName,
                     'category_id'      => $matchedCategory ? $matchedCategory->id : null,
                     'category_name'    => $matchedCategory ? $matchedCategory->name : 'Lainnya',
                     'amount'           => $amount,
@@ -335,6 +336,7 @@ class AiChatController extends Controller
 
         // Single budget save
         $validated = $request->validate([
+            'name'        => ['nullable', 'string', 'max:100'],
             'category_id' => ['required', 'exists:categories,id'],
             'amount'      => ['required', 'numeric', 'min:1000'],
             'month'       => ['nullable', 'integer', 'between:1,12'],
@@ -347,18 +349,20 @@ class AiChatController extends Controller
                 $validated['category_id'],
                 (float) $validated['amount'],
                 $validated['month'] ?? null,
-                $validated['year'] ?? null
+                $validated['year'] ?? null,
+                $validated['name'] ?? null
             );
 
             return $this->successResponse([
                 'id'               => $budget->id,
+                'name'             => $budget->name,
                 'category_id'      => $budget->category_id,
                 'category_name'    => $budget->category->name,
                 'amount'           => (float) $budget->amount,
                 'amount_formatted' => 'Rp ' . number_format($budget->amount, 0, ',', '.'),
                 'month'            => $budget->month,
                 'year'             => $budget->year,
-            ], "Anggaran kategori {$budget->category->name} berhasil disimpan.");
+            ], "Anggaran {$budget->name} ({$budget->category->name}) berhasil disimpan.");
         } catch (\Exception $e) {
             return $this->errorResponse('Gagal menyimpan anggaran: ' . $e->getMessage(), 422);
         }

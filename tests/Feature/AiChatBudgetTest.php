@@ -108,20 +108,22 @@ test('AI parses multiple budgets in a single sentence', function () {
         ->and($parsed['data']['items'][1]['amount'])->toBe(500000);
 });
 
-test('AI parses custom kebutuhan from budget request', function () {
+test('AI parses pos name and maps to standard category from budget request', function () {
     $service = new OpenRouterService();
 
     $parsed = $service->fallbackLocalParser(
         'Atur anggaran bayar kos 1.5jt dan sedekah 200rb',
         ['BCA'],
-        ['Makanan & Minuman', 'Belanja', 'Transportasi']
+        ['Makanan & Minuman', 'Belanja', 'Transportasi', 'Tempat Tinggal', 'Keluarga & Sedekah']
     );
 
     expect($parsed['intent'])->toBe('RECORD_BUDGET')
         ->and($parsed['data']['items'])->toHaveCount(2)
-        ->and($parsed['data']['items'][0]['category'])->toBe('Bayar Kos')
+        ->and($parsed['data']['items'][0]['name'])->toBe('Bayar Kos')
+        ->and($parsed['data']['items'][0]['category'])->toBe('Tempat Tinggal')
         ->and($parsed['data']['items'][0]['amount'])->toBe(1500000)
-        ->and($parsed['data']['items'][1]['category'])->toBe('Sedekah')
+        ->and($parsed['data']['items'][1]['name'])->toBe('Sedekah')
+        ->and($parsed['data']['items'][1]['category'])->toBe('Keluarga & Sedekah')
         ->and($parsed['data']['items'][1]['amount'])->toBe(200000);
 });
 
@@ -310,7 +312,7 @@ test('API save endpoint saves multiple cashflow transactions with overdraft prot
     $failResponse->assertStatus(422);
 });
 
-test('web AI parse and save-budget automatically creates custom kebutuhan for user', function () {
+test('web AI parse and save-budget correctly assigns name and maps to standard categories', function () {
     $user = User::factory()->create();
 
     $parseResponse = $this->actingAs($user)->postJson('/ai-chat/parse', [
@@ -320,20 +322,24 @@ test('web AI parse and save-budget automatically creates custom kebutuhan for us
     $parseResponse->assertStatus(200)
         ->assertJsonPath('status', 'success')
         ->assertJsonPath('intent', 'RECORD_BUDGET')
-        ->assertJsonPath('data.items.0.category_name', 'Bayar Kos')
-        ->assertJsonPath('data.items.1.category_name', 'Sedekah');
+        ->assertJsonPath('data.items.0.name', 'Bayar Kos')
+        ->assertJsonPath('data.items.0.category_name', 'Tempat Tinggal')
+        ->assertJsonPath('data.items.1.name', 'Sedekah')
+        ->assertJsonPath('data.items.1.category_name', 'Keluarga & Sedekah');
 
     $items = $parseResponse->json('data.items');
 
     $saveResponse = $this->actingAs($user)->postJson('/ai-chat/save-budget', [
         'items' => [
             [
+                'name'        => $items[0]['name'],
                 'category_id' => $items[0]['category_id'],
                 'amount'      => $items[0]['amount'],
                 'month'       => $items[0]['month'],
                 'year'        => $items[0]['year'],
             ],
             [
+                'name'        => $items[1]['name'],
                 'category_id' => $items[1]['category_id'],
                 'amount'      => $items[1]['amount'],
                 'month'       => $items[1]['month'],
@@ -345,22 +351,14 @@ test('web AI parse and save-budget automatically creates custom kebutuhan for us
     $saveResponse->assertStatus(200)
         ->assertJsonPath('status', 'success');
 
-    $this->assertDatabaseHas('categories', [
+    $this->assertDatabaseHas('budgets', [
         'user_id' => $user->id,
         'name'    => 'Bayar Kos',
+        'amount'  => 1500000,
     ]);
-    $this->assertDatabaseHas('categories', [
+    $this->assertDatabaseHas('budgets', [
         'user_id' => $user->id,
         'name'    => 'Sedekah',
-    ]);
-    $this->assertDatabaseHas('budgets', [
-        'user_id'     => $user->id,
-        'category_id' => $items[0]['category_id'],
-        'amount'      => 1500000,
-    ]);
-    $this->assertDatabaseHas('budgets', [
-        'user_id'     => $user->id,
-        'category_id' => $items[1]['category_id'],
-        'amount'      => 200000,
+        'amount'  => 200000,
     ]);
 });

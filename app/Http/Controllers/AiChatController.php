@@ -75,29 +75,24 @@ class AiChatController extends Controller
                 if ($month < 1 || $month > 12) $month = (int) now()->month;
                 if ($year < 2020 || $year > 2099) $year = (int) now()->year;
 
-                // Match Category / Kebutuhan
+                // Tentukan nama pos kebutuhan spesifik
+                $budgetName = trim($item['name'] ?? $item['kebutuhan'] ?? $item['title'] ?? '');
                 $extractedCatName = trim($item['category'] ?? '');
-                $extractedCatLower = strtolower($extractedCatName);
-                $matchedCategory = null;
 
-                foreach ($categories as $category) {
-                    $catNameLower = strtolower($category->name);
-                    if ($extractedCatLower === $catNameLower || str_contains($extractedCatLower, $catNameLower) || str_contains($catNameLower, $extractedCatLower)) {
-                        $matchedCategory = $category;
-                        break;
-                    }
-                }
-
-                // Jika belum ada di list kategori dan bukan 'Lainnya', buatkan atau temukan kebutuhan baru untuk user
-                if (!$matchedCategory && !empty($extractedCatName) && $extractedCatLower !== 'lainnya') {
-                    $matchedCategory = Category::findOrCreateKebutuhan($extractedCatName, $user->id);
-                }
+                // Resolve kategori master menggunakan BudgetService
+                $budgetService = app(\App\Services\BudgetService::class);
+                $matchedCategory = $budgetService->resolveCategory($extractedCatName ?: $budgetName, $user->id);
 
                 if (!$matchedCategory) {
                     $matchedCategory = $categories->firstWhere('type', 'Cash Out') ?? $categories->first();
                 }
 
+                if ($budgetName === '') {
+                    $budgetName = $extractedCatName ?: ($matchedCategory ? $matchedCategory->name : 'Anggaran');
+                }
+
                 $preparedBudgets[] = [
+                    'name'             => $budgetName,
                     'category_id'      => $matchedCategory ? $matchedCategory->id : null,
                     'category_name'    => $matchedCategory ? $matchedCategory->name : 'Lainnya',
                     'amount'           => $amount,
@@ -398,6 +393,7 @@ class AiChatController extends Controller
 
         // Single budget save
         $validated = $request->validate([
+            'name'        => 'nullable|string|max:100',
             'category_id' => 'nullable',
             'category'    => 'nullable|string',
             'kebutuhan'   => 'nullable|string',
@@ -406,26 +402,28 @@ class AiChatController extends Controller
             'year'        => 'nullable|integer|between:2020,2099',
         ]);
 
-        $catIdentifier = $validated['category_id'] ?? $validated['category'] ?? $validated['kebutuhan'] ?? null;
-        if (!$catIdentifier) {
+        $name = trim($validated['name'] ?? $validated['kebutuhan'] ?? '');
+        $catIdentifier = $validated['category_id'] ?? $validated['category'] ?? null;
+        if (!$name && !$catIdentifier) {
             return response()->json([
                 'status'  => 'error',
-                'message' => 'Kategori atau nama kebutuhan wajib diisi.',
+                'message' => 'Nama kebutuhan atau kategori wajib diisi.',
             ], 422);
         }
 
         try {
             $budget = $budgetService->recordBudget(
                 $user,
-                $catIdentifier,
+                $catIdentifier ?: $name,
                 (float) $validated['amount'],
                 $validated['month'] ?? null,
-                $validated['year'] ?? null
+                $validated['year'] ?? null,
+                $name ?: null
             );
 
             return response()->json([
                 'status'  => 'success',
-                'message' => "Anggaran kebutuhan {$budget->category->name} sebesar Rp " . number_format($budget->amount, 0, ',', '.') . " berhasil disimpan!",
+                'message' => "Anggaran {$budget->name} ({$budget->category->name}) sebesar Rp " . number_format($budget->amount, 0, ',', '.') . " berhasil disimpan!",
                 'data'    => $budget,
             ]);
         } catch (\Exception $e) {
