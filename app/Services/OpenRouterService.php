@@ -97,6 +97,19 @@ PROMPT;
                             }
                         }
                     }
+
+                    // Guardrail: jika user memberikan banyak item tapi LLM hanya menangkap sebagian/1 item, gunakan parser lokal yang lebih lengkap
+                    if (in_array($parsed['intent'], ['RECORD_BUDGET', 'RECORD_TRANSACTION'])) {
+                        $localParsed = $this->fallbackLocalParser($userMessage, $userAccounts, $userCategories);
+                        $llmItemCount = count($parsed['data']['items'] ?? []);
+                        $localItemCount = count($localParsed['data']['items'] ?? []);
+
+                        if ($localItemCount > $llmItemCount) {
+                            Log::info("Local parser found {$localItemCount} items vs LLM {$llmItemCount} items, using richer local parser result.");
+                            return $localParsed;
+                        }
+                    }
+
                     return $parsed;
                 }
             }
@@ -226,19 +239,27 @@ PROMPT;
         }
 
         // 3. Deteksi Penetapan Anggaran (RECORD_BUDGET)
-        $isBudgetIntent = preg_match('/\b(?:anggaran|budget|plafon|batas pengeluaran|alokasi)\b/i', $lowerMsg);
+        $isBudgetIntent = preg_match('/\b(?:anggaran|budget|plafon|batas(?:\s+pengeluaran)?|alokasi|pos\s+pengeluaran|rencana\s+pengeluaran)\b/i', $lowerMsg);
 
         if ($isBudgetIntent) {
             $budgetItems = $this->extractMultipleBudgets($message, $userCategories);
             if (!empty($budgetItems)) {
+                $targetDate = $this->detectMonthYearFromString($message);
+                $indonesianMonths = [
+                    1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+                    5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+                    9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+                ];
+                $monthName = $indonesianMonths[$targetDate['month']] ?? 'bulan ini';
+
                 return [
                     'intent' => 'RECORD_BUDGET',
                     'data'   => [
                         'items' => $budgetItems,
                     ],
                     'reply'  => count($budgetItems) > 1
-                        ? 'Saya menemukan ' . count($budgetItems) . ' rencana anggaran kategori. Silakan periksa rincian di bawah ini dan konfirmasi:'
-                        : 'Saya telah menyiapkan penetapan anggaran kategori Anda. Silakan periksa dan konfirmasi:'
+                        ? 'Saya menemukan ' . count($budgetItems) . ' rencana anggaran pos untuk ' . $monthName . '. Silakan periksa rincian di bawah ini dan konfirmasi:'
+                        : 'Saya telah menyiapkan penetapan anggaran pos Anda untuk ' . $monthName . '. Silakan periksa dan konfirmasi:'
                 ];
             }
         }
@@ -266,15 +287,103 @@ PROMPT;
     }
 
     /**
+     * Memisahkan pesan pengguna menjadi klausa item-item individual secara cerdas.
+     * Mendukung pemisah baris baru (\n), tanda bullet (-, *, •, 1., dll),
+     * serta pemisah kata/tanda baca (dan, serta, sama, lalu, ;, koma).
+     */
+    public function splitIntoItemClauses(string $message): array
+    {
+        $rawLines = preg_split('/[\r\n]+/', $message);
+        $clauses = [];
+
+        foreach ($rawLines as $line) {
+            $line = trim($line);
+            if (empty($line)) {
+                continue;
+            }
+
+            // Bersihkan bullet di awal baris: "-", "*", "•", "1.", "1)", dsb.
+            $line = preg_replace('/^\s*(?:[-*•–—\>]|\d+[\.)])\s*/u', '', $line);
+            if (empty($line)) {
+                continue;
+            }
+
+            // Sub-split jika di dalam baris ada bullet tambahan, titik dua header, atau kata penghubung
+            // Perhatikan: koma tidak dipecah jika diapit angka desimal (misal "1,5 juta")
+            $subClauses = preg_split('/(?:\s*(?:[-*•–—]|\b\d+[\.)])\s+|:\s+|\s*(?:dan|serta|sama|lalu|;)\s+|\s*,\s*(?![0-9]))/iu', $line);
+            foreach ($subClauses as $sub) {
+                $sub = trim($sub);
+                if (!empty($sub)) {
+                    $clauses[] = $sub;
+                }
+            }
+        }
+
+        return $clauses;
+    }
+
+    /**
+     * Mendeteksi bulan dan tahun dari teks (contoh: "bulan oktober", "november 2026", "bulan depan").
+     */
+    public function detectMonthYearFromString(string $text): array
+    {
+        $lower = strtolower($text);
+        $month = (int) now()->month;
+        $year  = (int) now()->year;
+
+        // Cek relatif: bulan depan / bulan lalu / bulan ini
+        if (preg_match('/\bbulan\s+depan\b/i', $lower)) {
+            $next = now()->addMonth();
+            return ['month' => (int)$next->month, 'year' => (int)$next->year];
+        }
+        if (preg_match('/\bbulan\s+(?:lalu|kemarin)\b/i', $lower)) {
+            $prev = now()->subMonth();
+            return ['month' => (int)$prev->month, 'year' => (int)$prev->year];
+        }
+
+        $monthMap = [
+            1  => ['januari', 'jan'],
+            2  => ['februari', 'feb'],
+            3  => ['maret', 'mar'],
+            4  => ['april', 'apr'],
+            5  => ['mei', 'may'],
+            6  => ['juni', 'jun'],
+            7  => ['juli', 'jul'],
+            8  => ['agustus', 'ags', 'agu', 'agust'],
+            9  => ['september', 'sep', 'sept'],
+            10 => ['oktober', 'okt', 'october', 'oct'],
+            11 => ['november', 'nov'],
+            12 => ['desember', 'des', 'december', 'dec'],
+        ];
+
+        foreach ($monthMap as $mNum => $names) {
+            foreach ($names as $name) {
+                if (preg_match('/\b' . preg_quote($name, '/') . '\b/i', $lower)) {
+                    $month = $mNum;
+                    break 2;
+                }
+            }
+        }
+
+        if (preg_match('/\b(20\d{2})\b/', $lower, $yearMatches)) {
+            $year = (int) $yearMatches[1];
+        }
+
+        return ['month' => $month, 'year' => $year];
+    }
+
+    /**
      * Mengekstrak beberapa anggaran kebutuhan sekaligus dari pesan pengguna.
      */
     public function extractMultipleBudgets(string $message, array $userCategories = []): array
     {
-        $currentMonth = (int) now()->month;
-        $currentYear  = (int) now()->year;
+        // 1. Deteksi bulan & tahun global dari pesan
+        $targetDate = $this->detectMonthYearFromString($message);
+        $globalMonth = $targetDate['month'];
+        $globalYear  = $targetDate['year'];
 
-        // Split berdasarkan kata penghubung atau tanda baca: koma, "dan", "serta", "sama", "lalu"
-        $clauses = preg_split('/(?:\s*(?:dan|serta|sama|lalu|,)\s*)+/i', $message);
+        // 2. Pisahkan klausa item
+        $clauses = $this->splitIntoItemClauses($message);
         $items = [];
 
         foreach ($clauses as $clause) {
@@ -285,6 +394,12 @@ PROMPT;
 
             $amount = $this->extractAmountFromString($clause);
             if ($amount >= 1000) {
+                // Periksa apakah klausa ini memiliki override bulan sendiri
+                $clauseDate = $this->detectMonthYearFromString($clause);
+                $hasClauseMonth = preg_match('/\b(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember)\b/i', $clause);
+                $itemMonth = $hasClauseMonth ? $clauseDate['month'] : $globalMonth;
+                $itemYear  = $hasClauseMonth ? $clauseDate['year'] : $globalYear;
+
                 $category = $this->detectCategoryFromString($clause, 'cash_out', $userCategories);
                 $name = $this->extractBudgetNameFromString($clause);
                 if (empty($name) || strtolower($name) === 'lainnya') {
@@ -295,8 +410,8 @@ PROMPT;
                     'name'     => $name,
                     'category' => $category,
                     'amount'   => $amount,
-                    'month'    => $currentMonth,
-                    'year'     => $currentYear,
+                    'month'    => $itemMonth,
+                    'year'     => $itemYear,
                 ];
             }
         }
@@ -315,8 +430,8 @@ PROMPT;
                     'name'     => $name,
                     'category' => $category,
                     'amount'   => $amount,
-                    'month'    => $currentMonth,
-                    'year'     => $currentYear,
+                    'month'    => $globalMonth,
+                    'year'     => $globalYear,
                 ];
             }
         }
@@ -332,8 +447,8 @@ PROMPT;
         // Deteksi apakah ada rekening global yang disebut (misal: "pake bca" di akhir)
         $globalAccount = $this->detectAccountFromString($message, $userAccounts);
 
-        // Split pesan jika ada tanda koma atau kata penghubung
-        $clauses = preg_split('/(?:\s*(?:dan|serta|sama|lalu|,)\s*)+/i', $message);
+        // Pisahkan pesan menjadi klausa item
+        $clauses = $this->splitIntoItemClauses($message);
         $items = [];
 
         foreach ($clauses as $clause) {
@@ -399,6 +514,27 @@ PROMPT;
     public function extractAmountFromString(string $str): int
     {
         $lower = strtolower($str);
+
+        // 1. Pola: "1 setengah juta" atau "setengah juta"
+        if (preg_match('/(\d+)?\s*setengah\s*(?:jt|juta)\b/i', $lower, $m)) {
+            $base = !empty($m[1]) ? (int)$m[1] * 1000000 : 0;
+            return $base + 500000;
+        }
+
+        // 2. Pola: "2 juta setengah" / "1jt setengah"
+        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:jt|juta)\s*setengah\b/i', $lower, $m)) {
+            $num = (float)str_replace(',', '.', $m[1]);
+            return (int) round($num * 1000000) + 500000;
+        }
+
+        // 3. Pola: "1 juta 100" / "1juta 100" / "1jt 500" / "1 juta 100rb"
+        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(?:jt|juta)\s*(\d{1,3})\s*(?:rb|k|ribu|rebu)?\b/i', $lower, $m)) {
+            $juta = (float)str_replace(',', '.', $m[1]);
+            $ratusan = (int)$m[2];
+            return (int) round($juta * 1000000) + ($ratusan * 1000);
+        }
+
+        // 4. Pola Standar: "1.1 juta", "600 rebu", "700k", "600 k", "Rp 50.000", "50rb"
         if (preg_match('/(?:rp\.?\s*)?(\d+(?:[.,]\d+)?)\s*(rb|k|ribu|rebu|jt|juta)?\b/i', $lower, $matches)) {
             $rawNumber = str_replace(',', '.', $matches[1]);
             $multiplier = 1;
@@ -495,20 +631,20 @@ PROMPT;
 
         $catRules = [
             'Tempat Tinggal'      => ['kos', 'kost', 'kontrakan', 'sewa rumah', 'cicilan rumah', 'kpr', 'rumah', 'apartemen'],
-            'Keluarga & Sedekah'  => ['sedekah', 'infaq', 'zakat', 'mamah', 'ibu', 'ayah', 'bapak', 'ortu', 'orang tua', 'keluarga', 'pegangan mamah'],
+            'Keluarga & Sedekah'  => ['pegangan mamah', 'pegangan', 'mamah', 'ibu', 'ayah', 'bapak', 'ortu', 'orang tua', 'keluarga', 'sedekah', 'infaq', 'zakat', 'adik', 'anak', 'istri', 'suami', 'mertua'],
             'Tabungan & Investasi'=> ['nabung', 'tabungan', 'investasi', 'deposito', 'reksadana', 'saham', 'crypto', 'emas'],
             'Pendidikan'          => ['sekolah', 'kuliah', 'kursus', 'les', 'buku', 'spp', 'ujian', 'pendidikan'],
             'Makanan & Minuman'   => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner', 'kuliner', 'jajan'],
-            'Transportasi'        => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport'],
-            'Belanja'             => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako'],
-            'Utilitas & Tagihan'  => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
+            'Transportasi'        => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport', 'ongkos'],
+            'Belanja'             => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako', 'uang saku', 'saku', 'pribadi', 'uang saku wahyu'],
+            'Utilitas & Tagihan'  => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'paket kuota', 'paket data', 'paket', 'telkomsel', 'tagihan', 'bpjs'],
             'Hiburan'             => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
             'Kesehatan'           => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
         ];
 
         foreach ($catRules as $catName => $keywords) {
             foreach ($keywords as $kw) {
-                if (str_contains($lower, $kw)) {
+                if (preg_match('/\b' . preg_quote($kw, '/') . '\b/iu', $lower)) {
                     return $catName;
                 }
             }
@@ -524,12 +660,22 @@ PROMPT;
     public function extractBudgetNameFromString(string $str): string
     {
         $clean = strtolower($str);
+        $clean = preg_replace('/^[-*•–—\d\.\)\>]+\s*/u', '', $clean);
         $clean = preg_replace('/\b(?:atur|buat|catat(?:kan)?|pasang|tetapkan|tambah(?:kan)?|masukkan|tolong|rencana(?:kan)?|alokasi(?:kan)?)\b/i', '', $clean);
         $clean = preg_replace('/\b(?:anggaran|budget|plafon|batas(?:\s+pengeluaran)?|kebutuhan)\b/i', '', $clean);
-        $clean = preg_replace('/\b(?:untuk|buat|sebesar|senilai|nominal|sebulan|tiap\s+bulan|per\s+bulan|bulan\s+ini|ini|dong|nih|ya|deh)\b/i', '', $clean);
+        $clean = preg_replace('/\b(?:untuk|sebesar|senilai|nominal|sebulan|tiap\s+bulan|per\s+bulan|dong|nih|ya|deh)\b/i', '', $clean);
+        $clean = preg_replace('/\b(?:bulan\s+)?(?:januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember|jan|feb|mar|apr|may|jun|jul|ags|agu|agust|sep|sept|okt|oct|nov|des|dec)\b/i', '', $clean);
+        $clean = preg_replace('/\b(?:bulan\s+(?:ini|depan|lalu|kemarin))\b/i', '', $clean);
+        $clean = preg_replace('/\b(20\d{2})\b/', '', $clean);
+
+        // Strip pola nominal
+        $clean = preg_replace('/(\d+)?\s*setengah\s*(?:jt|juta)\b/i', '', $clean);
+        $clean = preg_replace('/(\d+(?:[.,]\d+)?)\s*(?:jt|juta)\s*setengah\b/i', '', $clean);
+        $clean = preg_replace('/(\d+(?:[.,]\d+)?)\s*(?:jt|juta)\s*(\d{1,3})\s*(?:rb|k|ribu|rebu)?\b/i', '', $clean);
         $clean = preg_replace('/(?:rp\.?\s*)?\d+(?:[.,]\d+)?\s*(?:rb|k|ribu|rebu|jt|juta)?\b/i', '', $clean);
+
         $clean = trim(preg_replace('/\s+/', ' ', $clean));
-        $clean = trim($clean, " \t\n\r\0\x0B,.-_");
+        $clean = trim($clean, " \t\n\r\0\x0B,.-_:");
 
         if (!empty($clean) && strlen($clean) >= 2 && strlen($clean) <= 50) {
             return ucwords($clean);
@@ -561,20 +707,20 @@ PROMPT;
         // 2. Cek kategori standar bawaan
         $catRules = [
             'Tempat Tinggal'      => ['kos', 'kost', 'kontrakan', 'sewa rumah', 'cicilan rumah', 'kpr', 'rumah', 'apartemen'],
-            'Keluarga & Sedekah'  => ['sedekah', 'infaq', 'zakat', 'mamah', 'ibu', 'ayah', 'bapak', 'ortu', 'orang tua', 'keluarga', 'pegangan mamah'],
+            'Keluarga & Sedekah'  => ['pegangan mamah', 'pegangan', 'mamah', 'ibu', 'ayah', 'bapak', 'ortu', 'orang tua', 'keluarga', 'sedekah', 'infaq', 'zakat', 'adik', 'anak', 'istri', 'suami', 'mertua'],
             'Tabungan & Investasi'=> ['nabung', 'tabungan', 'investasi', 'deposito', 'reksadana', 'saham', 'crypto', 'emas'],
             'Pendidikan'          => ['sekolah', 'kuliah', 'kursus', 'les', 'buku', 'spp', 'ujian', 'pendidikan'],
             'Makanan & Minuman'   => ['makan', 'minum', 'kopi', 'ramen', 'bakso', 'soto', 'nasgor', 'nasi', 'resto', 'restoran', 'cafe', 'snack', 'roti', 'ayam', 'sarapan', 'lunch', 'dinner', 'kuliner', 'jajan'],
-            'Transportasi'        => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport'],
-            'Belanja'             => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako'],
-            'Utilitas & Tagihan'  => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'telkomsel', 'tagihan', 'bpjs'],
+            'Transportasi'        => ['bensin', 'pertalite', 'pertamax', 'solar', 'gojek', 'grab', 'ojol', 'maxim', 'parkir', 'tol', 'kereta', 'krl', 'mrt', 'angkot', 'bus', 'tiket', 'transport', 'ongkos'],
+            'Belanja'             => ['belanja', 'beli', 'indomaret', 'alfamart', 'supermarket', 'mall', 'shopee', 'tokopedia', 'baju', 'kaos', 'sepatu', 'celana', 'shopping', 'sembako', 'uang saku', 'saku', 'pribadi', 'uang saku wahyu'],
+            'Utilitas & Tagihan'  => ['listrik', 'pln', 'air', 'pdam', 'wifi', 'indihome', 'biznet', 'internet', 'pulsa', 'kuota', 'paket kuota', 'paket data', 'paket', 'telkomsel', 'tagihan', 'bpjs'],
             'Hiburan'             => ['nonton', 'bioskop', 'xxi', 'cinema', 'game', 'steam', 'top up', 'netflix', 'spotify', 'karaoke', 'liburan', 'jalan-jalan'],
             'Kesehatan'           => ['obat', 'dokter', 'apotek', 'apotik', 'vitamin', 'klinik', 'rumah sakit', 'rs']
         ];
 
         foreach ($catRules as $catName => $keywords) {
             foreach ($keywords as $kw) {
-                if (str_contains($lower, $kw)) {
+                if (preg_match('/\b' . preg_quote($kw, '/') . '\b/iu', $lower)) {
                     return $catName;
                 }
             }

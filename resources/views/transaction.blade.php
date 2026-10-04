@@ -409,6 +409,22 @@
                         </div>
                     </div>
 
+                    <!-- Pos Anggaran / Amplop (Khusus Pengeluaran) -->
+                    <div id="field-budget-item" class="space-y-1">
+                        <label class="block text-sm font-semibold text-gray-700">Pos Anggaran / Amplop (Opsional)</label>
+                        <select name="budget_item_id" id="form-budget-item-id" onchange="onBudgetItemChange(this)" class="w-full border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 border transition-all">
+                            <option value="">-- Tanpa Pos / Pengeluaran Umum --</option>
+                            @if(isset($budgetItems))
+                                @foreach($budgetItems as $bItem)
+                                    <option value="{{ $bItem->id }}" data-category-id="{{ $bItem->category_id }}">
+                                        🎯 {{ $bItem->name }} (Sisa: Rp {{ number_format(max(0, $bItem->remaining), 0, ',', '.') }})
+                                    </option>
+                                @endforeach
+                            @endif
+                        </select>
+                        <p class="text-[11px] text-gray-400">Pilih pos kebutuhan untuk menghubungkan transaksi langsung ke amplop anggaran.</p>
+                    </div>
+
                     <!-- Kategori (Dinamis) -->
                     <div id="field-category">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">Kategori <span class="text-red-500">*</span></label>
@@ -706,10 +722,21 @@
 
         // Dynamic fields display logic
         const categoryField = document.getElementById('field-category');
+        const budgetItemField = document.getElementById('field-budget-item');
         const sourceLabel = document.getElementById('label-savings-source');
         const destField = document.getElementById('field-savings-dest');
         const destSelect = document.getElementById('select-savings-dest');
         const feeField = document.getElementById('field-fee');
+
+        if (budgetItemField) {
+            if (type === 'Cash Out') {
+                budgetItemField.classList.remove('hidden');
+            } else {
+                budgetItemField.classList.add('hidden');
+                const bSelect = document.getElementById('form-budget-item-id');
+                if (bSelect) bSelect.value = '';
+            }
+        }
 
         if (type === 'Cash Out') {
             categoryField.classList.remove('hidden');
@@ -739,6 +766,17 @@
             document.getElementById('label-savings-dest').textContent = 'Ke Akun Tabungan (Tujuan)';
             destSelect.setAttribute('required', 'required');
             feeField.classList.remove('hidden');
+        }
+    }
+
+    function onBudgetItemChange(select) {
+        const selected = select.options[select.selectedIndex];
+        const catId = selected.getAttribute('data-category-id');
+        if (catId) {
+            const catSelect = document.getElementById('form-category-id');
+            if (catSelect) {
+                catSelect.value = catId;
+            }
         }
     }
 

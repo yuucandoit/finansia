@@ -55,11 +55,19 @@ class TransactionController extends Controller
 
         $saving = Saving::where('user_id', $userId)->get();
         $categories = Category::orderBy('name')->get();
+
+        $activeBudget = \App\Models\Budget::with('items.category')
+            ->where('user_id', $userId)
+            ->where('month', now()->month)
+            ->where('year', now()->year)
+            ->first();
+        $budgetItems = $activeBudget ? $activeBudget->items : collect([]);
         
         return view('transaction', [
             'transaction'  => $transaction,
             'saving'       => $saving,
             'categories'   => $categories,
+            'budgetItems'  => $budgetItems,
             'totalCashIn'  => $totalCashIn,
             'totalCashOut' => $totalCashOut,
         ]);
@@ -81,14 +89,15 @@ class TransactionController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'description' => 'required|string|max:255',
-            'type' => 'required|in:Cash In,Cash Out,Transfer,Tabungan',
-            'amount' => 'required|numeric|min:0',
-            'savings_id' => 'required|exists:savings,id',
+            'description'            => 'required|string|max:255',
+            'type'                   => 'required|in:Cash In,Cash Out,Transfer,Tabungan',
+            'amount'                 => 'required|numeric|min:0',
+            'savings_id'             => 'required|exists:savings,id',
             'destination_savings_id' => 'nullable|exists:savings,id',
-            'category_id' => 'nullable|exists:categories,id',
-            'fee' => 'nullable|numeric|min:0',
-            'transaction_date' => 'nullable|date',
+            'category_id'            => 'nullable|exists:categories,id',
+            'budget_item_id'         => 'nullable|exists:budget_items,id',
+            'fee'                    => 'nullable|numeric|min:0',
+            'transaction_date'       => 'nullable|date',
         ]);
 
         $userId = auth()->id();
@@ -96,9 +105,45 @@ class TransactionController extends Controller
         $amount = (float) $request->amount;
         $fee = (float) ($request->fee ?? 0);
         $categoryId = $request->category_id;
+        $budgetItemId = $request->budget_item_id ? (int) $request->budget_item_id : null;
+
+        // Jika user memilih pos anggaran tapi tidak memilih kategori, ambil kategori dari pos tersebut
+        if ($budgetItemId && !$categoryId) {
+            $bItem = \App\Models\BudgetItem::find($budgetItemId);
+            if ($bItem && $bItem->category_id) {
+                $categoryId = $bItem->category_id;
+            }
+        }
+
+        // Auto-assign ke pos anggaran jika pengeluaran dan belum ada budget_item_id
+        if (!$budgetItemId && $request->type === 'Cash Out' && $categoryId) {
+            $tDate = Carbon::parse($date);
+            $activeBudget = \App\Models\Budget::where('user_id', $userId)
+                ->where('month', $tDate->month)
+                ->where('year', $tDate->year)
+                ->first();
+
+            if ($activeBudget) {
+                $candidateItems = \App\Models\BudgetItem::where('budget_id', $activeBudget->id)
+                    ->where('category_id', $categoryId)
+                    ->get();
+
+                if ($candidateItems->count() === 1) {
+                    $budgetItemId = $candidateItems->first()->id;
+                } elseif ($candidateItems->count() > 1 && !empty($request->description)) {
+                    $descLower = strtolower($request->description);
+                    foreach ($candidateItems as $cItem) {
+                        if (str_contains($descLower, strtolower($cItem->name))) {
+                            $budgetItemId = $cItem->id;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
 
         try {
-            DB::transaction(function () use ($userId, $request, $date, $amount, $fee, $categoryId) {
+            DB::transaction(function () use ($userId, $request, $date, $amount, $fee, $categoryId, $budgetItemId) {
                 if ($request->type === 'Transfer' || ($request->type === 'Tabungan' && $request->destination_savings_id)) {
                     $sourceSaving = Saving::where('user_id', $userId)->findOrFail($request->savings_id);
                     $destSaving = Saving::where('user_id', $userId)->findOrFail($request->destination_savings_id);
@@ -109,30 +154,31 @@ class TransactionController extends Controller
 
                     // 1. Transaction Out on Source Account
                     Transaction::create([
-                        'user_id' => $userId,
-                        'savings_id' => $sourceSaving->id,
-                        'category_id' => $categoryId,
-                        'type' => $request->type,
-                        'description' => $request->description . ' (ke ' . $destSaving->name . ')',
-                        'amount' => $amount,
-                        'fee' => $fee > 0 ? $fee : null,
+                        'user_id'          => $userId,
+                        'savings_id'       => $sourceSaving->id,
+                        'category_id'      => $categoryId,
+                        'budget_item_id'   => $budgetItemId,
+                        'type'             => $request->type,
+                        'description'      => $request->description . ' (ke ' . $destSaving->name . ')',
+                        'amount'           => $amount,
+                        'fee'              => $fee > 0 ? $fee : null,
                         'transaction_date' => $date,
-                        'is_manual' => true,
+                        'is_manual'        => true,
                     ]);
 
                     $sourceSaving->decrement('current_balance', $amount + $fee);
 
                     // 2. Transaction In on Destination Account
                     Transaction::create([
-                        'user_id' => $userId,
-                        'savings_id' => $destSaving->id,
-                        'category_id' => $categoryId,
-                        'type' => $request->type,
-                        'description' => $request->description . ' (dari ' . $sourceSaving->name . ')',
-                        'amount' => $amount,
-                        'fee' => null,
+                        'user_id'          => $userId,
+                        'savings_id'       => $destSaving->id,
+                        'category_id'      => $categoryId,
+                        'type'             => $request->type,
+                        'description'      => $request->description . ' (dari ' . $sourceSaving->name . ')',
+                        'amount'           => $amount,
+                        'fee'              => null,
                         'transaction_date' => $date,
-                        'is_manual' => true,
+                        'is_manual'        => true,
                     ]);
 
                     $destSaving->increment('current_balance', $amount);
@@ -145,15 +191,16 @@ class TransactionController extends Controller
                     }
 
                     Transaction::create([
-                        'user_id' => $userId,
-                        'savings_id' => $saving->id,
-                        'category_id' => $categoryId,
-                        'type' => $request->type,
-                        'description' => $request->description,
-                        'amount' => $amount,
-                        'fee' => $fee > 0 ? $fee : null,
+                        'user_id'          => $userId,
+                        'savings_id'       => $saving->id,
+                        'category_id'      => $categoryId,
+                        'budget_item_id'   => $budgetItemId,
+                        'type'             => $request->type,
+                        'description'      => $request->description,
+                        'amount'           => $amount,
+                        'fee'              => $fee > 0 ? $fee : null,
                         'transaction_date' => $date,
-                        'is_manual' => true,
+                        'is_manual'        => true,
                     ]);
 
                     if ($request->type === 'Cash In') {

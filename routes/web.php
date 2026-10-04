@@ -36,6 +36,7 @@ Route::prefix('anggaran')->middleware(['auth', 'verified'])->group(function () {
     Route::get('/', [BudgetController::class, 'index'])->name('budget.index');
     Route::post('/store', [BudgetController::class, 'store'])->name('budget.store');
     Route::post('/copy-previous', [BudgetController::class, 'copyPrevious'])->name('budget.copy_previous');
+    Route::get('/{id}/transactions', [BudgetController::class, 'transactions'])->name('budget.transactions');
     Route::put('/{budget}', [BudgetController::class, 'update'])->name('budget.update');
     Route::delete('/{budget}', [BudgetController::class, 'destroy'])->name('budget.destroy');
 });

@@ -64,6 +64,11 @@ class User extends Authenticatable
         return $this->hasMany(Budget::class);
     }
 
+    public function budgetItems()
+    {
+        return $this->hasManyThrough(BudgetItem::class, Budget::class);
+    }
+
     public function isMasterMind(): bool
     {
         return $this->role === 'admin' || strtolower((string) $this->email) === 'wahyusnjy@gmail.com';

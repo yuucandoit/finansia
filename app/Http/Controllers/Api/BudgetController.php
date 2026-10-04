@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Budget;
+use App\Models\BudgetItem;
 use App\Models\Category;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -31,19 +32,21 @@ class BudgetController extends Controller
             $year = (int) now()->year;
         }
 
-        $budgets = Budget::with('category')
+        $budgetContainer = Budget::with(['items.category'])
             ->where('user_id', $userId)
             ->where('month', $month)
             ->where('year', $year)
-            ->get();
+            ->first();
 
-        $budgetItems = $budgets->map(function ($b) {
-            return $this->formatBudget($b);
+        $items = $budgetContainer ? $budgetContainer->items : collect([]);
+
+        $budgetItems = $items->map(function ($b) {
+            return $this->formatBudgetItem($b);
         });
 
         // Hitung total ringkasan
-        $totalBudget = (float) $budgets->sum('amount');
-        $totalSpent = (float) $budgets->sum(fn($b) => $b->spent);
+        $totalBudget = (float) $items->sum('amount');
+        $totalSpent = (float) $items->sum(fn($b) => $b->spent);
         $totalRemaining = (float) ($totalBudget - $totalSpent);
         $overallPercentage = $totalBudget > 0 ? round(($totalSpent / $totalBudget) * 100, 1) : 0;
 
@@ -82,7 +85,7 @@ class BudgetController extends Controller
                 'is_overbudget'             => $totalSpent > $totalBudget && $totalBudget > 0,
                 'overall_percentage'        => $overallPercentage,
                 'overall_status'            => $overallStatus,
-                'total_categories'          => $budgets->count(),
+                'total_categories'          => $items->count(),
             ],
             'budgets'              => $budgetItems,
             'available_categories' => $availableCategories,
@@ -139,7 +142,7 @@ class BudgetController extends Controller
             $name = $cat ? $cat->name : 'Anggaran';
         }
 
-        $budget = Budget::upsertBudget(
+        $budgetItem = Budget::upsertBudget(
             $userId,
             $name,
             $categoryId,
@@ -148,10 +151,10 @@ class BudgetController extends Controller
             (float) $validated['amount']
         );
 
-        $budget->load('category');
+        $budgetItem->load(['category', 'budget']);
 
         return $this->successResponse(
-            $this->formatBudget($budget),
+            $this->formatBudgetItem($budgetItem),
             'Anggaran kebutuhan berhasil disimpan.',
             201
         );
@@ -183,7 +186,7 @@ class BudgetController extends Controller
                 'count'                  => $result['count'],
                 'total_amount'           => $result['total_amount'],
                 'total_amount_formatted' => 'Rp ' . number_format($result['total_amount'], 0, ',', '.'),
-                'budgets'                => collect($result['budgets'])->map(fn($b) => $this->formatBudget($b)),
+                'budgets'                => collect($result['budgets'])->map(fn($b) => $this->formatBudgetItem($b)),
             ], 'Berhasil menyimpan ' . $result['count'] . ' anggaran kebutuhan.', 201);
         } catch (\Exception $e) {
             return $this->errorResponse($e->getMessage(), 422);
@@ -213,7 +216,7 @@ class BudgetController extends Controller
                 'from_year'  => $result['from_year'],
                 'to_month'   => $result['to_month'],
                 'to_year'    => $result['to_year'],
-                'budgets'    => collect($result['budgets'])->map(fn($b) => $this->formatBudget($b)),
+                'budgets'    => collect($result['budgets'])->map(fn($b) => $this->formatBudgetItem($b)),
             ], "Berhasil menyalin {$result['count']} anggaran kebutuhan dari bulan sebelumnya!", 201);
         } catch (\InvalidArgumentException $e) {
             return $this->errorResponse($e->getMessage(), 422);
@@ -223,22 +226,24 @@ class BudgetController extends Controller
     }
 
     /**
-     * Menampilkan detail satu anggaran kategori.
+     * Menampilkan detail satu pos anggaran beserta transaksi terkait.
      */
     public function show(Request $request, int $id): JsonResponse
     {
         $userId = $request->user()->id;
 
-        $budget = Budget::with('category')
-            ->where('user_id', $userId)
-            ->find($id);
+        $budgetItem = BudgetItem::with(['category', 'budget', 'transactions' => function ($q) {
+            $q->orderBy('transaction_date', 'desc');
+        }])
+        ->whereHas('budget', fn($q) => $q->where('user_id', $userId))
+        ->find($id);
 
-        if (!$budget) {
+        if (!$budgetItem) {
             return $this->errorResponse('Anggaran tidak ditemukan.', 404);
         }
 
         return $this->successResponse(
-            $this->formatBudget($budget),
+            $this->formatBudgetItem($budgetItem),
             'Detail anggaran berhasil diambil.'
         );
     }
@@ -250,9 +255,11 @@ class BudgetController extends Controller
     {
         $userId = $request->user()->id;
 
-        $budget = Budget::where('user_id', $userId)->find($id);
+        $budgetItem = BudgetItem::with('budget')
+            ->whereHas('budget', fn($q) => $q->where('user_id', $userId))
+            ->find($id);
 
-        if (!$budget) {
+        if (!$budgetItem) {
             return $this->errorResponse('Anggaran tidak ditemukan.', 404);
         }
 
@@ -277,37 +284,97 @@ class BudgetController extends Controller
             $updateData['category_id'] = (int) $request->input('category_id');
         }
 
-        $budget->update($updateData);
-        $budget->load('category');
+        $budgetItem->update($updateData);
+        $budgetItem->load(['category', 'budget']);
 
         return $this->successResponse(
-            $this->formatBudget($budget),
+            $this->formatBudgetItem($budgetItem),
             'Nominal anggaran berhasil diperbarui.'
         );
     }
 
     /**
-     * Menghapus anggaran kategori.
+     * Menghapus pos anggaran kategori.
      */
     public function destroy(Request $request, int $id): JsonResponse
     {
         $userId = $request->user()->id;
 
-        $budget = Budget::where('user_id', $userId)->find($id);
+        $budgetItem = BudgetItem::with('budget')
+            ->whereHas('budget', fn($q) => $q->where('user_id', $userId))
+            ->find($id);
 
-        if (!$budget) {
+        if (!$budgetItem) {
             return $this->errorResponse('Anggaran tidak ditemukan.', 404);
         }
 
-        $budget->delete();
+        $budgetItem->delete();
 
         return $this->successResponse(null, 'Anggaran berhasil dihapus.');
     }
 
     /**
-     * Format model Budget menjadi array response yang seragam.
+     * Menampilkan daftar transaksi yang terhubung ke satu pos anggaran (drill-down).
      */
-    private function formatBudget(Budget $b): array
+    public function transactions(Request $request, int $id): JsonResponse
+    {
+        $userId = $request->user()->id;
+
+        $budgetItem = BudgetItem::with(['budget', 'category'])
+            ->whereHas('budget', fn($q) => $q->where('user_id', $userId))
+            ->find($id);
+
+        if (!$budgetItem) {
+            return $this->errorResponse('Anggaran tidak ditemukan.', 404);
+        }
+
+        $startDate = Carbon::createFromDate($budgetItem->budget->year, $budgetItem->budget->month, 1)->startOfMonth();
+        $endDate   = Carbon::createFromDate($budgetItem->budget->year, $budgetItem->budget->month, 1)->endOfMonth();
+
+        $directTransactions = \App\Models\Transaction::with(['savingAccount', 'category'])
+            ->where('budget_item_id', $budgetItem->id)
+            ->whereIn('type', ['Cash Out'])
+            ->get();
+
+        $unassignedTransactions = \App\Models\Transaction::with(['savingAccount', 'category'])
+            ->where('user_id', $userId)
+            ->whereNull('budget_item_id')
+            ->where('category_id', $budgetItem->category_id)
+            ->whereIn('type', ['Cash Out'])
+            ->whereBetween('transaction_date', [$startDate, $endDate])
+            ->get();
+
+        $all = $directTransactions->merge($unassignedTransactions)->unique('id')->sortByDesc('transaction_date')->values();
+
+        return $this->successResponse([
+            'pos' => [
+                'id'               => $budgetItem->id,
+                'name'             => $budgetItem->name,
+                'amount'           => (float) $budgetItem->amount,
+                'amount_formatted' => 'Rp ' . number_format($budgetItem->amount, 0, ',', '.'),
+                'spent'            => (float) $budgetItem->spent,
+                'spent_formatted'  => 'Rp ' . number_format($budgetItem->spent, 0, ',', '.'),
+                'remaining'        => (float) $budgetItem->remaining,
+                'remaining_formatted' => 'Rp ' . number_format(abs($budgetItem->remaining), 0, ',', '.'),
+                'percentage'       => $budgetItem->percentage,
+                'status'           => $budgetItem->status,
+            ],
+            'transactions' => $all->map(fn($t) => [
+                'id'                      => $t->id,
+                'description'             => $t->description,
+                'amount'                  => (float) $t->amount,
+                'amount_formatted'        => 'Rp ' . number_format($t->amount, 0, ',', '.'),
+                'transaction_date'        => $t->transaction_date ? Carbon::parse($t->transaction_date)->translatedFormat('d M Y') : null,
+                'account_name'            => $t->savingAccount?->name ?? 'Dompet',
+                'is_direct'               => $t->budget_item_id === $budgetItem->id,
+            ]),
+        ], 'Daftar transaksi pos anggaran berhasil diambil.');
+    }
+
+    /**
+     * Format model BudgetItem menjadi array response yang seragam.
+     */
+    private function formatBudgetItem(BudgetItem $b): array
     {
         $spent = (float) $b->spent;
         $amount = (float) $b->amount;
@@ -317,6 +384,7 @@ class BudgetController extends Controller
 
         return [
             'id'                  => $b->id,
+            'budget_id'           => $b->budget_id,
             'name'                => $b->name,
             'category_id'         => $b->category_id,
             'month'               => $b->month,

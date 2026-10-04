@@ -380,6 +380,15 @@
 
                             <!-- Actions -->
                             <div class="flex items-center gap-2 pt-3 border-t border-gray-100">
+                                <button onclick="openTransactionsModal({{ $budget->id }}, '{{ addslashes($budget->name ?: $budget->category->name) }}')"
+                                        class="inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-all"
+                                        title="Lihat Riwayat Transaksi Pos Ini">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+                                    </svg>
+                                    <span>Riwayat</span>
+                                </button>
+
                                 <button onclick="openEditModal({{ $budget->id }}, '{{ addslashes($budget->name ?: $budget->category->name) }}', {{ $budget->category_id }}, {{ $amount }})"
                                         class="flex-1 inline-flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition-all">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -589,6 +598,76 @@
         </div>
     </div>
 
+    <!-- Modal Riwayat Transaksi Pos Anggaran -->
+    <div id="modal-transactions" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity bg-black/50 backdrop-blur-xs" onclick="closeTransactionsModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+
+            <div class="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-2xl rounded-3xl">
+                <!-- Header -->
+                <div class="flex items-center justify-between pb-4 border-b border-gray-100 mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                            <i class="fas fa-receipt text-base"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-900" id="tx-pos-name">Rincian Transaksi Pos</h3>
+                            <p class="text-xs text-gray-500" id="tx-pos-category">Memuat data...</p>
+                        </div>
+                    </div>
+                    <button onclick="closeTransactionsModal()" class="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-all">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Pos Overview Ribbon -->
+                <div id="tx-pos-overview" class="grid grid-cols-3 gap-3 p-3 bg-gray-50 rounded-2xl mb-4 text-center">
+                    <div>
+                        <span class="text-[11px] text-gray-400 block">Batas Anggaran</span>
+                        <span class="font-extrabold text-sm text-gray-800" id="tx-pos-amount">-</span>
+                    </div>
+                    <div>
+                        <span class="text-[11px] text-gray-400 block">Total Terpakai</span>
+                        <span class="font-extrabold text-sm text-amber-600" id="tx-pos-spent">-</span>
+                    </div>
+                    <div>
+                        <span class="text-[11px] text-gray-400 block">Sisa Anggaran</span>
+                        <span class="font-extrabold text-sm text-emerald-600" id="tx-pos-remaining">-</span>
+                    </div>
+                </div>
+
+                <!-- Transactions Container -->
+                <div id="tx-pos-loading" class="py-12 text-center text-gray-400">
+                    <i class="fas fa-spinner fa-spin text-2xl mb-2 text-blue-500"></i>
+                    <p class="text-xs">Memuat riwayat transaksi...</p>
+                </div>
+
+                <div id="tx-pos-list" class="hidden max-h-80 overflow-y-auto space-y-2 pr-1">
+                    <!-- Populated dynamically via JS -->
+                </div>
+
+                <div id="tx-pos-empty" class="hidden py-10 text-center text-gray-400">
+                    <div class="w-12 h-12 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-2">
+                        <i class="fas fa-receipt text-lg"></i>
+                    </div>
+                    <p class="text-sm font-semibold text-gray-700">Belum Ada Transaksi</p>
+                    <p class="text-xs text-gray-400 mt-0.5">Belum ada pengeluaran yang dialokasikan ke pos kebutuhan ini pada periode ini.</p>
+                </div>
+
+                <!-- Footer -->
+                <div class="flex items-center justify-between pt-4 border-t border-gray-100 mt-4">
+                    <span class="text-xs text-gray-400" id="tx-pos-count">0 transaksi</span>
+                    <button type="button" onclick="closeTransactionsModal()" class="py-2 px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl text-sm transition-all">
+                        Tutup
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts for Modals -->
     <script>
         function openCreateModal() {
@@ -641,12 +720,83 @@
             document.getElementById('modal-delete').classList.add('hidden');
         }
 
+        function openTransactionsModal(budgetItemId, budgetItemName) {
+            document.getElementById('tx-pos-name').textContent = budgetItemName;
+            document.getElementById('tx-pos-category').textContent = 'Memuat data...';
+            document.getElementById('tx-pos-amount').textContent = '-';
+            document.getElementById('tx-pos-spent').textContent = '-';
+            document.getElementById('tx-pos-remaining').textContent = '-';
+            document.getElementById('tx-pos-loading').classList.remove('hidden');
+            document.getElementById('tx-pos-list').classList.add('hidden');
+            document.getElementById('tx-pos-empty').classList.add('hidden');
+            document.getElementById('modal-transactions').classList.remove('hidden');
+
+            fetch(`/anggaran/${budgetItemId}/transactions`)
+                .then(res => res.json())
+                .then(res => {
+                    document.getElementById('tx-pos-loading').classList.add('hidden');
+                    if (!res.data) return;
+
+                    const pos = res.data.pos;
+                    const txs = res.data.transactions;
+
+                    document.getElementById('tx-pos-name').textContent = pos.name;
+                    document.getElementById('tx-pos-category').textContent = pos.category ? `Kategori: ${pos.category.name}` : 'Kategori Umum';
+                    document.getElementById('tx-pos-amount').textContent = pos.amount_formatted;
+                    document.getElementById('tx-pos-spent').textContent = pos.spent_formatted;
+                    document.getElementById('tx-pos-remaining').textContent = pos.remaining_formatted;
+                    document.getElementById('tx-pos-count').textContent = `${txs.length} transaksi`;
+
+                    const listContainer = document.getElementById('tx-pos-list');
+                    listContainer.innerHTML = '';
+
+                    if (txs.length === 0) {
+                        document.getElementById('tx-pos-empty').classList.remove('hidden');
+                    } else {
+                        document.getElementById('tx-pos-empty').classList.add('hidden');
+                        document.getElementById('tx-pos-list').classList.remove('hidden');
+
+                        txs.forEach(t => {
+                            const itemEl = document.createElement('div');
+                            itemEl.className = 'p-3 bg-white hover:bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-between gap-3 transition-colors';
+                            itemEl.innerHTML = `
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+                                        <i class="fas fa-arrow-up text-xs"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-bold text-gray-800 leading-tight">${t.description}</p>
+                                        <div class="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
+                                            <span>📅 ${t.transaction_date || '-'}</span>
+                                            <span>•</span>
+                                            <span>💳 ${t.account_name}</span>
+                                            ${t.is_direct ? '<span class="px-1.5 py-0.2 text-[9px] font-bold rounded bg-emerald-50 text-emerald-700">Tercatat Langsung</span>' : '<span class="px-1.5 py-0.2 text-[9px] font-medium rounded bg-blue-50 text-blue-700">Kategori Cocok</span>'}
+                                        </div>
+                                    </div>
+                                </div>
+                                <span class="font-extrabold text-sm text-rose-600 whitespace-nowrap">- ${t.amount_formatted}</span>
+                            `;
+                            listContainer.appendChild(itemEl);
+                        });
+                    }
+                })
+                .catch(err => {
+                    document.getElementById('tx-pos-loading').classList.add('hidden');
+                    document.getElementById('tx-pos-empty').classList.remove('hidden');
+                });
+        }
+
+        function closeTransactionsModal() {
+            document.getElementById('modal-transactions').classList.add('hidden');
+        }
+
         // Close modal on Escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeCreateModal();
                 closeEditModal();
                 closeDeleteModal();
+                closeTransactionsModal();
             }
         });
     </script>

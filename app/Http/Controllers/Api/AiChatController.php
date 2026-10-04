@@ -234,14 +234,38 @@ class AiChatController extends Controller
                             throw new \Exception("Saldo rekening {$saving->name} tidak mencukupi untuk transaksi {$item['description']}.");
                         }
 
+                        $txDate = $item['transaction_date'] ?? $item['date'] ?? now();
+                        $categoryId = $item['category_id'] ?? null;
+                        $budgetItemId = $item['budget_item_id'] ?? null;
+
+                        if (!$budgetItemId && ($item['type'] ?? 'Cash Out') === 'Cash Out' && $categoryId) {
+                            $tDate = Carbon::parse($txDate);
+                            $b = \App\Models\Budget::where('user_id', $userId)->where('month', $tDate->month)->where('year', $tDate->year)->first();
+                            if ($b) {
+                                $cands = \App\Models\BudgetItem::where('budget_id', $b->id)->where('category_id', $categoryId)->get();
+                                if ($cands->count() === 1) {
+                                    $budgetItemId = $cands->first()->id;
+                                } elseif ($cands->count() > 1 && !empty($item['description'])) {
+                                    $dl = strtolower($item['description']);
+                                    foreach ($cands as $cand) {
+                                        if (str_contains($dl, strtolower($cand->name))) {
+                                            $budgetItemId = $cand->id;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         Transaction::create([
                             'user_id'          => $userId,
                             'savings_id'       => $saving->id,
-                            'category_id'      => $item['category_id'] ?? null,
+                            'category_id'      => $categoryId,
+                            'budget_item_id'   => $budgetItemId,
                             'type'             => $item['type'] ?? 'Cash Out',
                             'description'      => $item['description'] ?? 'Transaksi AI',
                             'amount'           => $amount,
-                            'transaction_date' => $item['transaction_date'] ?? $item['date'] ?? now(),
+                            'transaction_date' => $txDate,
                             'is_manual'        => true,
                         ]);
 
@@ -267,6 +291,7 @@ class AiChatController extends Controller
         $validated = $request->validate([
             'savings_id'       => ['required', 'exists:savings,id'],
             'category_id'      => ['nullable', 'exists:categories,id'],
+            'budget_item_id'   => ['nullable', 'exists:budget_items,id'],
             'type'             => ['required', 'in:Cash In,Cash Out,Transfer,Tabungan'],
             'amount'           => ['required', 'numeric', 'min:1'],
             'description'      => ['required', 'string', 'max:255'],
@@ -284,16 +309,40 @@ class AiChatController extends Controller
             );
         }
 
+        $txDate = $validated['transaction_date'] ?? now();
+        $categoryId = $validated['category_id'] ?? null;
+        $budgetItemId = $validated['budget_item_id'] ?? null;
+
+        if (!$budgetItemId && $validated['type'] === 'Cash Out' && $categoryId) {
+            $tDate = Carbon::parse($txDate);
+            $b = \App\Models\Budget::where('user_id', $userId)->where('month', $tDate->month)->where('year', $tDate->year)->first();
+            if ($b) {
+                $cands = \App\Models\BudgetItem::where('budget_id', $b->id)->where('category_id', $categoryId)->get();
+                if ($cands->count() === 1) {
+                    $budgetItemId = $cands->first()->id;
+                } elseif ($cands->count() > 1 && !empty($validated['description'])) {
+                    $dl = strtolower($validated['description']);
+                    foreach ($cands as $cand) {
+                        if (str_contains($dl, strtolower($cand->name))) {
+                            $budgetItemId = $cand->id;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         try {
-            DB::transaction(function () use ($userId, $validated, $saving, $amount) {
+            DB::transaction(function () use ($userId, $validated, $saving, $amount, $categoryId, $budgetItemId, $txDate) {
                 Transaction::create([
                     'user_id'          => $userId,
                     'savings_id'       => $saving->id,
-                    'category_id'      => $validated['category_id'] ?? null,
+                    'category_id'      => $categoryId,
+                    'budget_item_id'   => $budgetItemId,
                     'type'             => $validated['type'],
                     'description'      => $validated['description'],
                     'amount'           => $amount,
-                    'transaction_date' => $validated['transaction_date'] ?? now(),
+                    'transaction_date' => $txDate,
                     'is_manual'        => true,
                 ]);
 

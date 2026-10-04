@@ -23,7 +23,7 @@ class TransactionController extends Controller
         $userId = $request->user()->id;
         $perPage = (int) $request->query('per_page', 15);
 
-        $query = Transaction::with(['category', 'savingAccount'])
+        $query = Transaction::with(['category', 'savingAccount', 'budgetItem'])
             ->where('user_id', $userId);
 
         // Filter: Tipe Transaksi
@@ -80,6 +80,11 @@ class TransactionController extends Controller
                     'name'  => $item->category->name,
                     'color' => $item->category->color,
                 ] : null,
+                'budget_item'             => $item->budgetItem ? [
+                    'id'     => $item->budgetItem->id,
+                    'name'   => $item->budgetItem->name,
+                    'amount' => (float) $item->budgetItem->amount,
+                ] : null,
                 'saving_account'          => $item->savingAccount ? [
                     'id'   => $item->savingAccount->id,
                     'name' => $item->savingAccount->name,
@@ -118,6 +123,7 @@ class TransactionController extends Controller
             'savings_id'             => ['required', 'exists:savings,id'],
             'destination_savings_id' => ['nullable', 'exists:savings,id'],
             'category_id'            => ['nullable', 'exists:categories,id'],
+            'budget_item_id'         => ['nullable', 'exists:budget_items,id'],
             'fee'                    => ['nullable', 'numeric', 'min:0'],
             'transaction_date'       => ['nullable', 'date'],
         ]);
@@ -126,9 +132,44 @@ class TransactionController extends Controller
         $fee = (float) ($validated['fee'] ?? 0);
         $date = $validated['transaction_date'] ?? now();
         $categoryId = $validated['category_id'] ?? null;
+        $budgetItemId = !empty($validated['budget_item_id']) ? (int) $validated['budget_item_id'] : null;
+
+        if ($budgetItemId && !$categoryId) {
+            $bItem = \App\Models\BudgetItem::find($budgetItemId);
+            if ($bItem && $bItem->category_id) {
+                $categoryId = $bItem->category_id;
+            }
+        }
+
+        // Auto-assign ke pos anggaran jika pengeluaran dan belum ada budget_item_id
+        if (!$budgetItemId && $validated['type'] === 'Cash Out' && $categoryId) {
+            $tDate = Carbon::parse($date);
+            $activeBudget = \App\Models\Budget::where('user_id', $userId)
+                ->where('month', $tDate->month)
+                ->where('year', $tDate->year)
+                ->first();
+
+            if ($activeBudget) {
+                $candidateItems = \App\Models\BudgetItem::where('budget_id', $activeBudget->id)
+                    ->where('category_id', $categoryId)
+                    ->get();
+
+                if ($candidateItems->count() === 1) {
+                    $budgetItemId = $candidateItems->first()->id;
+                } elseif ($candidateItems->count() > 1 && !empty($validated['description'])) {
+                    $descLower = strtolower($validated['description']);
+                    foreach ($candidateItems as $cItem) {
+                        if (str_contains($descLower, strtolower($cItem->name))) {
+                            $budgetItemId = $cItem->id;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
 
         try {
-            $transaction = DB::transaction(function () use ($userId, $validated, $amount, $fee, $date, $categoryId) {
+            $transaction = DB::transaction(function () use ($userId, $validated, $amount, $fee, $date, $categoryId, $budgetItemId) {
 
                 // Skenario 1: Transfer atau Tabungan ke rekening tujuan
                 if ($validated['type'] === 'Transfer' || ($validated['type'] === 'Tabungan' && !empty($validated['destination_savings_id']))) {
@@ -147,6 +188,7 @@ class TransactionController extends Controller
                         'user_id'          => $userId,
                         'savings_id'       => $sourceSaving->id,
                         'category_id'      => $categoryId,
+                        'budget_item_id'   => $budgetItemId,
                         'type'             => $validated['type'],
                         'description'      => $validated['description'] . ' (ke ' . $destSaving->name . ')',
                         'amount'           => $amount,
@@ -189,6 +231,7 @@ class TransactionController extends Controller
                     'user_id'          => $userId,
                     'savings_id'       => $saving->id,
                     'category_id'      => $categoryId,
+                    'budget_item_id'   => $budgetItemId,
                     'type'             => $validated['type'],
                     'description'      => $validated['description'],
                     'amount'           => $amount,

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Budget;
+use App\Models\BudgetItem;
 use App\Models\Category;
 use App\Models\User;
 use Carbon\Carbon;
@@ -22,7 +23,7 @@ class BudgetService
         ?int $month = null,
         ?int $year = null,
         ?string $name = null
-    ): Budget {
+    ): BudgetItem {
         if ($amount < 1000) {
             throw new InvalidArgumentException('Nominal anggaran minimal Rp 1.000.');
         }
@@ -53,7 +54,7 @@ class BudgetService
             $budgetName = (is_string($category) && !is_numeric($category)) ? trim($category) : $resolvedCategory->name;
         }
 
-        $budget = Budget::upsertBudget(
+        $budgetItem = Budget::upsertBudget(
             $user->id,
             $budgetName,
             $resolvedCategory->id,
@@ -62,9 +63,9 @@ class BudgetService
             $amount
         );
 
-        $budget->load('category');
+        $budgetItem->load(['category', 'budget']);
 
-        return $budget;
+        return $budgetItem;
     }
 
     /**
@@ -143,15 +144,16 @@ class BudgetService
         $month = $month ?: (int) now()->month;
         $year  = $year ?: (int) now()->year;
 
-        $budgets = Budget::with('category')
+        $budget = Budget::with(['items.category'])
             ->where('user_id', $user->id)
             ->where('month', $month)
             ->where('year', $year)
-            ->orderBy('id', 'desc')
-            ->get();
+            ->first();
 
-        $totalBudget = (float) $budgets->sum('amount');
-        $totalSpent = (float) $budgets->sum(fn($b) => $b->spent);
+        $items = $budget ? $budget->items : collect([]);
+
+        $totalBudget = (float) $items->sum('amount');
+        $totalSpent = (float) $items->sum(fn($b) => $b->spent);
         $totalRemaining = (float) ($totalBudget - $totalSpent);
         $overallPercentage = $totalBudget > 0 ? round(($totalSpent / $totalBudget) * 100, 1) : 0;
 
@@ -162,8 +164,8 @@ class BudgetService
             'total_spent'        => $totalSpent,
             'total_remaining'    => $totalRemaining,
             'overall_percentage' => $overallPercentage,
-            'count'              => $budgets->count(),
-            'budgets'            => $budgets,
+            'count'              => $items->count(),
+            'budgets'            => $items,
         ];
     }
 
@@ -175,29 +177,29 @@ class BudgetService
         $prevMonth = $targetMonth === 1 ? 12 : $targetMonth - 1;
         $prevYear  = $targetMonth === 1 ? $targetYear - 1 : $targetYear;
 
-        $previousBudgets = Budget::with('category')
+        $previousBudget = Budget::with('items.category')
             ->where('user_id', $user->id)
             ->where('month', $prevMonth)
             ->where('year', $prevYear)
-            ->get();
+            ->first();
 
-        if ($previousBudgets->isEmpty()) {
+        if (!$previousBudget || $previousBudget->items->isEmpty()) {
             throw new InvalidArgumentException("Tidak ada data anggaran pada bulan sebelumnya ({$prevMonth}/{$prevYear}) untuk disalin.");
         }
 
         $copied = [];
-        DB::transaction(function () use ($user, $previousBudgets, $targetMonth, $targetYear, &$copied) {
-            foreach ($previousBudgets as $pb) {
-                $b = Budget::upsertBudget(
-                    $user->id,
+        DB::transaction(function () use ($user, $previousBudget, $targetMonth, $targetYear, &$copied) {
+            $targetContainer = Budget::getOrCreateBudget($user->id, $targetMonth, $targetYear);
+
+            foreach ($previousBudget->items as $pb) {
+                $item = BudgetItem::upsertItem(
+                    $targetContainer,
                     $pb->name ?: ($pb->category?->name ?? 'Anggaran'),
                     $pb->category_id,
-                    $targetMonth,
-                    $targetYear,
-                    $pb->amount
+                    (float) $pb->amount
                 );
-                $b->load('category');
-                $copied[] = $b;
+                $item->load(['category', 'budget']);
+                $copied[] = $item;
             }
         });
 
@@ -308,11 +310,17 @@ class BudgetService
             'parkir'         => 'Transportasi',
             'tol'            => 'Transportasi',
 
+            'saku'           => 'Belanja',
+            'uang saku'      => 'Belanja',
+            'pribadi'        => 'Belanja',
+            'pegangan'       => 'Keluarga & Sedekah',
+
             'listrik'        => 'Utilitas & Tagihan',
             'air'            => 'Utilitas & Tagihan',
             'pdam'           => 'Utilitas & Tagihan',
             'pulsa'          => 'Utilitas & Tagihan',
             'paket'          => 'Utilitas & Tagihan',
+            'paket kuota'    => 'Utilitas & Tagihan',
             'kuota'          => 'Utilitas & Tagihan',
             'wifi'           => 'Utilitas & Tagihan',
             'tagihan'        => 'Utilitas & Tagihan',
@@ -338,7 +346,7 @@ class BudgetService
         ];
 
         foreach ($aliases as $keyword => $targetName) {
-            if (str_contains($identifierLower, $keyword)) {
+            if (preg_match('/\b' . preg_quote($keyword, '/') . '\b/iu', $identifierLower)) {
                 $matched = Category::where('name', $targetName)->first();
                 if ($matched) {
                     return $matched;

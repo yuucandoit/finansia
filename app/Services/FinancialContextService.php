@@ -59,21 +59,24 @@ class FinancialContextService
         // 5. Anggaran Bulanan & Status Pemakaian
         $currentMonth = (int) now()->month;
         $currentYear  = (int) now()->year;
-        $budgets = $user->budgets()
-            ->with('category')
+        $budget = $user->budgets()
+            ->with(['items.category'])
             ->where('month', $currentMonth)
             ->where('year', $currentYear)
-            ->get();
+            ->first();
 
-        $totalBudget = (float) $budgets->sum('amount');
-        $totalBudgetSpent = (float) $budgets->sum(fn($b) => $b->spent);
+        $items = $budget ? $budget->items : collect([]);
+
+        $totalBudget = (float) $items->sum('amount');
+        $totalBudgetSpent = (float) $items->sum(fn($b) => $b->spent);
 
         $budgetSnapshot = [
             'total_anggaran'    => (int) $totalBudget,
             'total_terpakai'    => (int) $totalBudgetSpent,
             'sisa_anggaran'     => (int) ($totalBudget - $totalBudgetSpent),
             'status_agregat'    => $totalBudgetSpent > $totalBudget && $totalBudget > 0 ? 'overbudget' : ($totalBudget > 0 && ($totalBudgetSpent / $totalBudget) >= 0.8 ? 'warning' : 'safe'),
-            'daftar_anggaran'   => $budgets->map(fn($b) => [
+            'daftar_anggaran'   => $items->map(fn($b) => [
+                'pos'        => $b->name,
                 'kategori'   => $b->category->name ?? 'Lainnya',
                 'batas'      => (int) $b->amount,
                 'terpakai'   => (int) $b->spent,

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Budget;
+use App\Models\BudgetItem;
 use App\Models\Category;
 use App\Models\Saving;
 use App\Models\Transaction;
@@ -44,16 +45,18 @@ test('BudgetService records single budget correctly', function () {
 
     $budget = $service->recordBudget($user, 'Makanan & Minuman', 1500000, 9, 2026);
 
-    expect($budget)->toBeInstanceOf(Budget::class)
+    expect($budget)->toBeInstanceOf(BudgetItem::class)
         ->and($budget->amount)->toEqual(1500000)
         ->and($budget->month)->toBe(9)
         ->and($budget->year)->toBe(2026);
 
     $this->assertDatabaseHas('budgets', [
         'user_id' => $user->id,
-        'amount'  => 1500000,
         'month'   => 9,
         'year'    => 2026,
+    ]);
+    $this->assertDatabaseHas('budget_items', [
+        'amount' => 1500000,
     ]);
 });
 
@@ -73,7 +76,8 @@ test('BudgetService records multiple budgets in one call', function () {
         ->and($result['count'])->toBe(3)
         ->and($result['total_amount'])->toEqual(2100000);
 
-    $this->assertDatabaseCount('budgets', 3);
+    $this->assertDatabaseCount('budgets', 1);
+    $this->assertDatabaseCount('budget_items', 3);
 });
 
 // ─────────────────────────────────────────────
@@ -175,8 +179,8 @@ test('web AI save-budget saves multiple budgets successfully', function () {
     $response->assertStatus(200)
         ->assertJsonPath('status', 'success');
 
-    $this->assertDatabaseHas('budgets', ['user_id' => $user->id, 'category_id' => $cat1->id, 'amount' => 1500000]);
-    $this->assertDatabaseHas('budgets', ['user_id' => $user->id, 'category_id' => $cat2->id, 'amount' => 500000]);
+    $this->assertDatabaseHas('budget_items', ['category_id' => $cat1->id, 'amount' => 1500000]);
+    $this->assertDatabaseHas('budget_items', ['category_id' => $cat2->id, 'amount' => 500000]);
 });
 
 test('web AI save endpoint can save multiple cashflow transactions', function () {
@@ -254,8 +258,8 @@ test('API save-budget endpoint saves multiple budgets', function () {
         ->assertJsonPath('status', 'success')
         ->assertJsonPath('data.count', 2);
 
-    $this->assertDatabaseHas('budgets', ['user_id' => $user->id, 'category_id' => $cat1->id, 'amount' => 2000000]);
-    $this->assertDatabaseHas('budgets', ['user_id' => $user->id, 'category_id' => $cat2->id, 'amount' => 750000]);
+    $this->assertDatabaseHas('budget_items', ['category_id' => $cat1->id, 'amount' => 2000000]);
+    $this->assertDatabaseHas('budget_items', ['category_id' => $cat2->id, 'amount' => 750000]);
 });
 
 test('API save endpoint saves multiple cashflow transactions with overdraft protection', function () {
@@ -351,14 +355,76 @@ test('web AI parse and save-budget correctly assigns name and maps to standard c
     $saveResponse->assertStatus(200)
         ->assertJsonPath('status', 'success');
 
-    $this->assertDatabaseHas('budgets', [
-        'user_id' => $user->id,
-        'name'    => 'Bayar Kos',
-        'amount'  => 1500000,
+    $this->assertDatabaseHas('budget_items', [
+        'name'   => 'Bayar Kos',
+        'amount' => 1500000,
     ]);
-    $this->assertDatabaseHas('budgets', [
-        'user_id' => $user->id,
-        'name'    => 'Sedekah',
-        'amount'  => 200000,
+    $this->assertDatabaseHas('budget_items', [
+        'name'   => 'Sedekah',
+        'amount' => 200000,
     ]);
 });
+
+test('AI parses multiline bullet list of budgets and saves all items correctly', function () {
+    Category::create(['name' => 'Tempat Tinggal', 'type' => 'Cash Out', 'color' => 'indigo', 'icon' => 'fa-house']);
+    Category::create(['name' => 'Keluarga & Sedekah', 'type' => 'Cash Out', 'color' => 'purple', 'icon' => 'fa-hand-holding-heart']);
+    Category::create(['name' => 'Utilitas & Tagihan', 'type' => 'Cash Out', 'color' => 'yellow', 'icon' => 'fa-bolt']);
+    Category::create(['name' => 'Tabungan & Investasi', 'type' => 'Cash Out', 'color' => 'emerald', 'icon' => 'fa-piggy-bank']);
+
+    $user = User::factory()->create();
+
+    $multilinePrompt = "Atur anggaran bulan oktober\n"
+        . "- Kontrakan 1.1 juta\n"
+        . "- Pegangan mamah 600 rebu\n"
+        . "- Bensin 700k\n"
+        . "- Listrik 60k\n"
+        . "- Paket Kuota 250k\n"
+        . "- Nabung 5 juta\n"
+        . "- Uang Saku Wahyu 2 juta";
+
+    $parseResponse = $this->actingAs($user)->postJson('/ai-chat/parse', [
+        'message' => $multilinePrompt,
+    ]);
+
+    $parseResponse->assertStatus(200)
+        ->assertJsonPath('status', 'success')
+        ->assertJsonPath('intent', 'RECORD_BUDGET')
+        ->assertJsonCount(7, 'data.items');
+
+    $items = $parseResponse->json('data.items');
+
+    expect($items[0]['name'])->toBe('Kontrakan')
+        ->and($items[0]['amount'])->toBe(1100000)
+        ->and($items[0]['month'])->toBe(10)
+        ->and($items[1]['name'])->toBe('Pegangan Mamah')
+        ->and($items[1]['amount'])->toBe(600000)
+        ->and($items[1]['month'])->toBe(10)
+        ->and($items[2]['name'])->toBe('Bensin')
+        ->and($items[2]['amount'])->toBe(700000)
+        ->and($items[3]['name'])->toBe('Listrik')
+        ->and($items[3]['amount'])->toBe(60000)
+        ->and($items[3]['category_name'])->toBe('Utilitas & Tagihan')
+        ->and($items[4]['name'])->toBe('Paket Kuota')
+        ->and($items[4]['amount'])->toBe(250000)
+        ->and($items[5]['name'])->toBe('Nabung')
+        ->and($items[5]['amount'])->toBe(5000000)
+        ->and($items[6]['name'])->toBe('Uang Saku Wahyu')
+        ->and($items[6]['amount'])->toBe(2000000);
+
+    // Test simpan semua 7 item via /ai-chat/save-budget
+    $saveResponse = $this->actingAs($user)->postJson('/ai-chat/save-budget', [
+        'items' => array_map(fn($it) => [
+            'name'        => $it['name'],
+            'category_id' => $it['category_id'],
+            'amount'      => $it['amount'],
+            'month'       => $it['month'],
+            'year'        => $it['year'],
+        ], $items),
+    ]);
+
+    $saveResponse->assertStatus(200)
+        ->assertJsonPath('status', 'success');
+
+    expect(BudgetItem::count())->toBe(7);
+});
+
