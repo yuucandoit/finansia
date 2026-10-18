@@ -56,6 +56,8 @@ Route::prefix('v1')->group(function () {
         // --- Transaksi & Kategori ---
         Route::get('/transactions', [TransactionController::class, 'index']);
         Route::post('/transactions', [TransactionController::class, 'store']);
+        Route::post('/transactions/import-pdf', [TransactionController::class, 'importPdfPreview']);
+        Route::post('/transactions/import-pdf/save', [TransactionController::class, 'importPdfSave']);
         Route::get('/transactions/{id}', [TransactionController::class, 'show']);
         Route::delete('/transactions/{id}', [TransactionController::class, 'destroy']);
         Route::get('/categories', [TransactionController::class, 'categories']);

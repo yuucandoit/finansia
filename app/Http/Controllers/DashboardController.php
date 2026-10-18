@@ -105,7 +105,17 @@ class DashboardController extends Controller
             ->orderBy('transaction_date','DESC')
             ->limit(5)
             ->get();
-        
+
+        // Savings accounts & categories untuk fitur import dan transaksi
+        $savings = Saving::where('user_id', $userId)->with('bank')->get();
+        $categories = \App\Models\Category::orderBy('name')->get();
+        $activeBudget = \App\Models\Budget::with('items.category')
+            ->where('user_id', $userId)
+            ->where('month', (int) now()->month)
+            ->where('year', (int) now()->year)
+            ->first();
+        $budgetItems = $activeBudget ? $activeBudget->items : collect([]);
+
         return view('dashboard', [
             'totalBalance' => $totalBalance,
             'cashInThisMonth' => $cashInThisMonth,
@@ -118,6 +128,9 @@ class DashboardController extends Controller
             'last30Days' => $last30Days,
             'balanceTrend' => $balanceTrend,
             'recentTransactions' => $recentTransactions,
+            'savings' => $savings,
+            'categories' => $categories,
+            'budgetItems' => $budgetItems,
         ]);
     }
 }

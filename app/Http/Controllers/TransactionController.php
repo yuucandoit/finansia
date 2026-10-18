@@ -6,6 +6,7 @@ use App\Models\Saving;
 use App\Models\Transaction;
 use App\Models\Transaction_Item;
 use App\Models\Category;
+use App\Services\PdfImportService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -526,6 +527,115 @@ class TransactionController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Terjadi kesalahan: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Preview ekstraksi transaksi dari PDF e-statement bank.
+     */
+    public function importPdfPreview(Request $request, PdfImportService $importService)
+    {
+        $request->validate([
+            'file'       => 'required|file|mimes:pdf|max:20480',
+            'savings_id' => 'required|exists:savings,id',
+            'password'   => 'nullable|string',
+        ], [
+            'file.required'       => 'Silakan pilih file PDF terlebih dahulu.',
+            'file.mimes'          => 'File harus berformat PDF.',
+            'file.max'            => 'Ukuran file PDF maksimal 20MB.',
+            'savings_id.required' => 'Pilih rekening tujuan.',
+        ]);
+
+        $saving = Saving::where('id', $request->savings_id)
+            ->where('user_id', auth()->id())
+            ->first();
+
+        if (!$saving) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Rekening bank tidak ditemukan atau bukan milik Anda.',
+            ], 403);
+        }
+
+        $file = $request->file('file');
+        $tempFileName = 'import_' . auth()->id() . '_' . time() . '_' . uniqid() . '.pdf';
+        $tempPath = $file->storeAs('temp', $tempFileName, 'public');
+        $fullPath = storage_path('app/public/' . $tempPath);
+
+        try {
+            $extractedData = $importService->extract($fullPath, $request->password, auth()->id());
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Berhasil mengekstrak transaksi dari PDF.',
+                'data'    => $extractedData,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => $e->getMessage(),
+            ], 422);
+        } catch (\Exception $e) {
+            \Log::error('PDF Import preview error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal memproses file PDF: ' . $e->getMessage(),
+            ], 500);
+        } finally {
+            if (\Storage::disk('public')->exists($tempPath)) {
+                \Storage::disk('public')->delete($tempPath);
+            }
+        }
+    }
+
+    /**
+     * Simpan data transaksi PDF yang sudah diedit pengguna ke database.
+     */
+    public function importPdfSave(Request $request, PdfImportService $importService)
+    {
+        $request->validate([
+            'savings_id'                     => 'required|exists:savings,id',
+            'transactions'                   => 'required|array|min:1',
+            'transactions.*.amount'          => 'required|numeric|min:0.01',
+            'transactions.*.type'            => 'required|in:Cash In,Cash Out,Transfer,Tabungan',
+            'transactions.*.description'     => 'required|string|max:255',
+            'transactions.*.transaction_date'=> 'required|date',
+            'transactions.*.category_id'     => 'nullable|exists:categories,id',
+            'transactions.*.budget_item_id'  => 'nullable|exists:budget_items,id',
+            'transactions.*.is_selected'     => 'nullable|boolean',
+            'update_balance'                 => 'nullable|boolean',
+            'final_balance'                  => 'nullable|numeric',
+        ], [
+            'transactions.required' => 'Tidak ada transaksi yang dikirim untuk disimpan.',
+            'transactions.min'      => 'Minimal pilih satu transaksi untuk disimpan.',
+        ]);
+
+        try {
+            $result = $importService->saveImported(
+                auth()->user(),
+                (int) $request->savings_id,
+                $request->transactions,
+                (bool) $request->input('update_balance', false),
+                $request->filled('final_balance') ? (float) $request->final_balance : null
+            );
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => "Berhasil menyimpan {$result['count']} transaksi ke rekening {$result['saving_name']}!",
+                'count'   => $result['count'],
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('PDF Import save error: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Gagal menyimpan transaksi: ' . $e->getMessage(),
             ], 500);
         }
     }

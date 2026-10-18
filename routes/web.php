@@ -22,6 +22,8 @@ Route::prefix('transaksi')->group(function () {
     Route::get('/',[TransactionController::class,'index'])->name('transaction.index')->middleware(['auth', 'verified']);
     Route::post('/store',[TransactionController::class,'store'])->name('transaction.store');
     Route::post('/import',[TransactionController::class,'import'])->name('transaction.import');
+    Route::post('/import-pdf', [TransactionController::class, 'importPdfPreview'])->name('transaction.import_pdf');
+    Route::post('/import-pdf/save', [TransactionController::class, 'importPdfSave'])->name('transaction.import_pdf_save');
 })->middleware(['auth', 'verified']);
 
 Route::prefix('saving')->group(function () {

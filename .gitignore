@@ -26,3 +26,15 @@ Thumbs.db
 **/caddy
 frankenphp
 frankenphp-worker.php
+
+# Python Virtual Environments & Cache
+.venv
+*/.venv
+**/.venv
+venv/
+*/venv/
+__pycache__/
+*.py[cod]
+*$py.class
+testing_folder/
+*/testing_folder/

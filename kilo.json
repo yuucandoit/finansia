@@ -1,0 +1,22 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "provider": {
+    "kenari": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Kenari",
+      "options": {
+        "baseURL": "https://kenari.id/v1",
+        "apiKey": "kn-c4303569e36b004a821a4f6dfaadfc2d5abf65cf62cc1e1a"
+      },
+      "models": {
+        "qwen3-8-omni-flash:free": {
+          "name": "Qwen3 8B Omni Flash (free)",
+          "limit": {
+            "context": 32768,
+            "output": 4096
+          }
+        }
+      }
+    }
+  }
+}

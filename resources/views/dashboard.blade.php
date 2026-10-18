@@ -26,12 +26,12 @@
                                 </h2>
                             </div>
                             <div class="flex items-center gap-2 w-full sm:w-auto">
-                                <a href="{{ route('transaction.index', ['add' => 1]) }}" class="flex-1 sm:flex-none justify-center bg-white text-blue-700 hover:bg-blue-50 py-2 sm:py-2.5 px-3.5 sm:px-5 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 shadow-md hover:shadow-xl flex items-center gap-1.5 whitespace-nowrap">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4 sm:w-5 sm:h-5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                <button type="button" onclick="openPdfImportModal()" class="flex-1 sm:flex-none justify-center bg-white text-blue-700 hover:bg-blue-50 py-2 sm:py-2.5 px-3.5 sm:px-5 rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 shadow-md hover:shadow-xl flex items-center gap-1.5 whitespace-nowrap cursor-pointer">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4 sm:w-5 sm:h-5 text-blue-600">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                                     </svg>
-                                    Tambah Transaksi
-                                </a>
+                                    Import Transaksi
+                                </button>
                                 <button onclick="window.location.reload()" class="bg-white/20 backdrop-blur-sm hover:bg-white/30 border border-white/30 text-white py-2 sm:py-2.5 px-3 sm:px-4 rounded-xl font-semibold text-xs sm:text-sm transition-all duration-200 shadow-md hover:shadow-xl flex items-center justify-center gap-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 sm:w-5 sm:h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -406,5 +406,792 @@
                 }
             }
         });
+    </script>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 1: Upload PDF Statement                                             -->
+    <!-- ========================================================================= -->
+    <div id="pdfImportModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <!-- Backdrop -->
+            <div onclick="closePdfImportModal()" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div class="inline-block align-bottom bg-white rounded-2xl sm:rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all sm:my-8 sm:align-middle sm:max-w-xl sm:w-full border border-gray-100">
+                <!-- Modal Header -->
+                <div class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 p-6 text-white relative">
+                    <button onclick="closePdfImportModal()" type="button" class="absolute top-5 right-5 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 text-white">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold tracking-tight text-white">Import Transaksi Bank</h3>
+                            <p class="text-xs text-blue-100 mt-0.5">Ekstrak mutasi PDF dari Bank Jago, BCA, Mandiri, dll.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Body -->
+                <form id="pdfUploadForm" onsubmit="handlePdfExtraction(event)" class="p-6 space-y-5">
+                    <!-- Pilih Rekening Bank -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                            Pilih Rekening Tujuan <span class="text-red-500">*</span>
+                        </label>
+                        @if($savings->isEmpty())
+                            <div class="bg-amber-50 border border-amber-200 text-amber-800 p-3.5 rounded-xl text-xs flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 flex-shrink-0 text-amber-600">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                </svg>
+                                <span>Anda belum memiliki rekening tabungan. <a href="{{ route('saving.index') }}" class="underline font-bold text-amber-900">Buat rekening</a> terlebih dahulu.</span>
+                            </div>
+                        @else
+                            <div class="relative">
+                                <select id="importPdfSavingsId" name="savings_id" required class="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none">
+                                    <option value="" disabled selected>-- Pilih Rekening / Bank Anda --</option>
+                                    @foreach($savings as $savingAccount)
+                                        <option value="{{ $savingAccount->id }}" data-balance="{{ $savingAccount->current_balance }}" data-name="{{ $savingAccount->name }}">
+                                            {{ $savingAccount->bank->name ?? 'Bank' }} - {{ $savingAccount->name }} (Saldo: Rp {{ number_format($savingAccount->current_balance, 0, ',', '.') }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 text-gray-400">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                    </svg>
+                                </div>
+                            </div>
+                        @endif
+                    </div>
+
+                    <!-- Upload File PDF Area -->
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                            File Dokumen PDF <span class="text-red-500">*</span>
+                        </label>
+                        <div id="pdfDropzone" class="border-2 border-dashed border-gray-300 hover:border-blue-500 bg-gray-50/70 hover:bg-blue-50/50 rounded-2xl p-6 text-center transition-all cursor-pointer relative group">
+                            <input type="file" id="pdfFileInput" name="file" accept=".pdf,application/pdf" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleFileSelect(this)">
+                            
+                            <!-- State: Kosong / Belum Pilih -->
+                            <div id="dropzoneEmpty">
+                                <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-2xl mx-auto flex items-center justify-center mb-3 group-hover:scale-110 transition-transform shadow-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-6 h-6">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                    </svg>
+                                </div>
+                                <p class="text-sm font-semibold text-gray-700">Pilih file PDF atau seret ke sini</p>
+                                <p class="text-xs text-gray-400 mt-1">Format .pdf mutasi rekening e-statement (Maks. 20MB)</p>
+                            </div>
+
+                            <!-- State: File Terpilih -->
+                            <div id="dropzoneSelected" class="hidden">
+                                <div class="flex items-center justify-center gap-3 text-left">
+                                    <div class="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                        </svg>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <p id="selectedFileName" class="text-sm font-bold text-gray-800 truncate">document.pdf</p>
+                                        <p id="selectedFileSize" class="text-xs text-gray-500">0 KB</p>
+                                    </div>
+                                    <button type="button" onclick="clearSelectedFile(event)" class="text-xs text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg font-semibold transition-colors">
+                                        Ganti
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Password PDF (Opsional) -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1.5">
+                            <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                Password PDF <span class="text-gray-400 font-normal lowercase">(opsional)</span>
+                            </label>
+                            <span class="text-[11px] text-gray-500">Kosongkan jika file tidak terkunci</span>
+                        </div>
+                        <div class="relative">
+                            <input type="password" id="importPdfPassword" name="password" placeholder="Contoh: Tanggal lahir DDMMYYYY (jika diproteksi)"
+                                   class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none pr-10">
+                            <button type="button" onclick="togglePasswordVisibility('importPdfPassword')" class="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-600">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Info Alert -->
+                    <div class="bg-blue-50/70 border border-blue-100 rounded-xl p-3.5 flex items-start gap-3">
+                        <div class="text-blue-600 mt-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                            </svg>
+                        </div>
+                        <p class="text-xs text-blue-900 leading-relaxed">
+                            Data akan diekstrak menggunakan parser AI & OCR. Anda dapat <strong>memeriksa dan mengubah</strong> seluruh nominal, tanggal, kategori, atau menghapus baris sebelum disimpan ke sistem.
+                        </p>
+                    </div>
+
+                    <!-- Footer Action Buttons -->
+                    <div class="flex gap-3 pt-2">
+                        <button type="button" onclick="closePdfImportModal()" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 px-4 rounded-xl font-semibold text-sm transition-all">
+                            Batal
+                        </button>
+                        <button type="submit" id="btnStartExtract" class="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white py-2.5 px-5 rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                            <span>Mulai Ekstraksi</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                            </svg>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 2: Loading Extraction State                                         -->
+    <!-- ========================================================================= -->
+    <div id="pdfImportLoadingModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-slate-900/75 backdrop-blur-md transition-opacity"></div>
+            
+            <div class="relative bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-gray-100 text-center overflow-hidden">
+                <!-- Laser Scanning Animation Graphic -->
+                <div class="relative w-24 h-28 mx-auto mb-6 bg-blue-50 border-2 border-blue-200 rounded-2xl flex flex-col justify-between p-3.5 shadow-md overflow-hidden">
+                    <div class="space-y-1.5">
+                        <div class="w-10 h-2 bg-blue-300 rounded"></div>
+                        <div class="w-16 h-1.5 bg-blue-200 rounded"></div>
+                        <div class="w-12 h-1.5 bg-blue-200 rounded"></div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <div class="w-14 h-1.5 bg-blue-200 rounded"></div>
+                        <div class="w-8 h-1.5 bg-blue-200 rounded"></div>
+                    </div>
+                    <!-- Moving Scanner Bar -->
+                    <div class="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-blue-500 to-transparent shadow-[0_0_12px_rgba(59,130,246,0.9)] animate-scanner"></div>
+                </div>
+
+                <h3 class="text-lg font-bold text-gray-900 mb-1.5">Mengekstrak Transaksi PDF...</h3>
+                <p class="text-xs text-gray-500 max-w-xs mx-auto mb-5 leading-relaxed">
+                    Parser Python sedang membaca halaman e-statement dan mendeteksi kolom tanggal, deskripsi, serta nominal.
+                </p>
+
+                <!-- Animated Progress Indicator -->
+                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-3">
+                    <div class="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full w-2/3 animate-pulse"></div>
+                </div>
+
+                <p class="text-[11px] text-gray-400 font-medium">Harap jangan menutup browser saat proses ekstraksi berlangsung.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 3: Data Review & Modification (UX High Priority)                    -->
+    <!-- ========================================================================= -->
+    <div id="pdfImportReviewModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen p-2 sm:p-4 text-center">
+            <div onclick="closeReviewModal()" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm transition-opacity"></div>
+            
+            <div class="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-gray-100 max-w-6xl w-full mx-auto my-4 text-left overflow-hidden flex flex-col max-h-[92vh]">
+                
+                <!-- Review Modal Header -->
+                <div class="p-4 sm:p-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white flex-shrink-0">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="bg-blue-500/20 text-blue-300 border border-blue-400/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                    Hasil Ekstraksi PDF
+                                </span>
+                                <span id="reviewTargetSavingBadge" class="bg-white/10 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+                                    Rekening
+                                </span>
+                            </div>
+                            <h2 class="text-lg sm:text-2xl font-black tracking-tight">Verifikasi & Sesuaikan Transaksi</h2>
+                            <p class="text-xs text-blue-200 mt-0.5">Periksa, ubah nominal/kategori, atau hapus baris sebelum menyimpan ke catatan finansial.</p>
+                        </div>
+
+                        <!-- Stat Badges -->
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <div class="bg-white/10 border border-white/15 px-3 py-1.5 rounded-xl">
+                                <p class="text-[10px] text-blue-200 uppercase font-semibold">Total Item</p>
+                                <p id="reviewTotalItemsBadge" class="text-sm font-extrabold text-white">0</p>
+                            </div>
+                            <div class="bg-green-500/15 border border-green-400/30 px-3 py-1.5 rounded-xl">
+                                <p class="text-[10px] text-green-300 uppercase font-semibold">Total Masuk</p>
+                                <p id="reviewTotalCashInBadge" class="text-sm font-extrabold text-green-400">+Rp 0</p>
+                            </div>
+                            <div class="bg-red-500/15 border border-red-400/30 px-3 py-1.5 rounded-xl">
+                                <p class="text-[10px] text-red-300 uppercase font-semibold">Total Keluar</p>
+                                <p id="reviewTotalCashOutBadge" class="text-sm font-extrabold text-red-400">-Rp 0</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Review Toolbar (Search, Filter, Select All, Balance Update Toggle) -->
+                <div class="bg-gray-50 border-b border-gray-200 p-3 sm:p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 flex-shrink-0">
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <!-- Select All Checkbox -->
+                        <label class="inline-flex items-center gap-2 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
+                            <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" checked class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4">
+                            <span>Pilih Semua</span>
+                        </label>
+
+                        <!-- Filter Type Pills -->
+                        <div class="inline-flex rounded-xl bg-gray-200/70 p-0.5 text-xs font-semibold">
+                            <button type="button" onclick="setReviewFilter('all')" id="filterTabAll" class="filter-tab px-3 py-1 rounded-lg bg-white text-gray-800 shadow-sm transition-all">Semua</button>
+                            <button type="button" onclick="setReviewFilter('Cash In')" id="filterTabIn" class="filter-tab px-3 py-1 rounded-lg text-gray-600 hover:text-gray-800 transition-all">Pemasukan</button>
+                            <button type="button" onclick="setReviewFilter('Cash Out')" id="filterTabOut" class="filter-tab px-3 py-1 rounded-lg text-gray-600 hover:text-gray-800 transition-all">Pengeluaran</button>
+                        </div>
+
+                        <!-- Search Box -->
+                        <div class="relative flex-1 sm:w-64">
+                            <input type="text" id="reviewSearchInput" oninput="handleReviewSearch(this.value)" placeholder="Cari deskripsi atau nominal..."
+                                   class="w-full bg-white border border-gray-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <svg class="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Update Saldo Toggle -->
+                    <div id="updateBalanceContainer" class="flex items-center gap-2">
+                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-700 bg-blue-50/80 border border-blue-200/70 px-3 py-1.5 rounded-xl hover:bg-blue-100/60 transition-colors">
+                            <input type="checkbox" id="updateBalanceCheckbox" checked class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4">
+                            <span>Perbarui saldo rekening ke saldo akhir PDF (<strong id="reviewFinalBalanceLabel" class="text-blue-700">Rp 0</strong>)</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Review Editable Table Container -->
+                <div class="overflow-x-auto overflow-y-auto flex-1 p-2 sm:p-4 min-h-[300px]">
+                    <table class="w-full text-left border-collapse min-w-[900px]">
+                        <thead>
+                            <tr class="text-[11px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 bg-gray-50/50 sticky top-0 z-10">
+                                <th class="p-2.5 w-10 text-center">Pilih</th>
+                                <th class="p-2.5 w-32">Tanggal</th>
+                                <th class="p-2.5 w-32">Tipe</th>
+                                <th class="p-2.5 min-w-[220px]">Deskripsi Transaksi</th>
+                                <th class="p-2.5 w-44">Kategori</th>
+                                <th class="p-2.5 w-44">Pos Anggaran</th>
+                                <th class="p-2.5 w-36 text-right">Nominal (Rp)</th>
+                                <th class="p-2.5 w-28 text-right">Saldo PDF</th>
+                                <th class="p-2.5 w-12 text-center">Hapus</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reviewTableBody" class="divide-y divide-gray-100 text-xs">
+                            <!-- Rows dynamically populated by JavaScript -->
+                        </tbody>
+                    </table>
+
+                    <!-- Empty State in Table -->
+                    <div id="reviewEmptyState" class="hidden text-center py-12">
+                        <div class="w-12 h-12 bg-gray-100 text-gray-400 rounded-2xl mx-auto flex items-center justify-center mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-6 h-6">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                            </svg>
+                        </div>
+                        <p class="text-sm font-semibold text-gray-600">Tidak ada transaksi yang cocok dengan filter</p>
+                    </div>
+                </div>
+
+                <!-- Review Modal Footer -->
+                <div class="bg-gray-50 border-t border-gray-200 p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-3 flex-shrink-0">
+                    <div class="text-xs text-gray-600">
+                        Menampilkan <strong id="reviewCountVisible" class="text-gray-900">0</strong> transaksi | 
+                        <strong id="reviewCountSelected" class="text-blue-700">0</strong> transaksi akan disimpan
+                    </div>
+
+                    <div class="flex items-center gap-2.5 w-full sm:w-auto">
+                        <button type="button" onclick="closeReviewModal()" class="flex-1 sm:flex-none px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-100 text-gray-700 rounded-xl text-xs sm:text-sm font-semibold transition-all">
+                            Batal
+                        </button>
+                        <button type="button" id="btnSaveImported" onclick="submitImportedTransactions()" class="flex-1 sm:flex-none px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                            <span id="btnSaveImportedText">Simpan Transaksi</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODAL 4: Success Feedback Animation Modal                                 -->
+    <!-- ========================================================================= -->
+    <div id="pdfImportSuccessModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 text-center">
+            <div class="fixed inset-0 bg-slate-900/75 backdrop-blur-md transition-opacity"></div>
+            
+            <div class="relative bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl border border-gray-100 text-center overflow-hidden">
+                <!-- Checkmark Success Animation -->
+                <div class="w-20 h-20 bg-green-100 text-green-600 rounded-full mx-auto flex items-center justify-center mb-5 animate-bounce shadow-lg shadow-green-100">
+                    <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                </div>
+
+                <h3 class="text-xl font-black text-gray-900 mb-1">Import Berhasil!</h3>
+                <p id="pdfImportSuccessMessage" class="text-xs text-gray-600 mb-4 leading-relaxed">
+                    Transaksi telah berhasil dicatat ke dalam database.
+                </p>
+
+                <div class="inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1.5 rounded-full text-xs font-medium">
+                    <svg class="animate-spin -ml-1 mr-1 h-3.5 w-3.5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Memperbarui data dashboard...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inline Animation Styles for Scanner -->
+    <style>
+        @keyframes scanner {
+            0% { top: 0%; opacity: 0.8; }
+            50% { top: 90%; opacity: 1; }
+            100% { top: 0%; opacity: 0.8; }
+        }
+        .animate-scanner {
+            animation: scanner 2.2s ease-in-out infinite;
+        }
+    </style>
+
+    <!-- ========================================================================= -->
+    <!-- JAVASCRIPT LOGIC: PDF Import Flow & Editable Review Modal                  -->
+    <!-- ========================================================================= -->
+    <script>
+        // Master Data dari Backend
+        window.availableCategories = @json($categories ?? []);
+        window.availableBudgetItems = @json($budgetItems ?? []);
+        window.currentPdfTransactions = [];
+        window.currentPdfSummary = {};
+        window.selectedSavingId = null;
+        window.selectedSavingName = '';
+        window.currentReviewFilter = 'all';
+        window.currentReviewSearch = '';
+
+        // Modal Controls
+        function openPdfImportModal() {
+            document.getElementById('pdfImportModal').classList.remove('hidden');
+        }
+
+        function closePdfImportModal() {
+            document.getElementById('pdfImportModal').classList.add('hidden');
+        }
+
+        function closeReviewModal() {
+            if (confirm('Batalkan import data transaksi ini? Data yang belum disimpan akan hilang.')) {
+                document.getElementById('pdfImportReviewModal').classList.add('hidden');
+            }
+        }
+
+        function handleFileSelect(input) {
+            const emptyEl = document.getElementById('dropzoneEmpty');
+            const selectedEl = document.getElementById('dropzoneSelected');
+            const nameEl = document.getElementById('selectedFileName');
+            const sizeEl = document.getElementById('selectedFileSize');
+
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                nameEl.textContent = file.name;
+                sizeEl.textContent = (file.size / 1024).toFixed(1) + ' KB';
+                emptyEl.classList.add('hidden');
+                selectedEl.classList.remove('hidden');
+            }
+        }
+
+        function clearSelectedFile(event) {
+            event.stopPropagation();
+            event.preventDefault();
+            const input = document.getElementById('pdfFileInput');
+            input.value = '';
+            document.getElementById('dropzoneEmpty').classList.remove('hidden');
+            document.getElementById('dropzoneSelected').classList.add('hidden');
+        }
+
+        function togglePasswordVisibility(inputId) {
+            const input = document.getElementById(inputId);
+            input.type = input.type === 'password' ? 'text' : 'password';
+        }
+
+        // Handle Ekstraksi PDF (AJAX Call to Controller)
+        async function handlePdfExtraction(event) {
+            event.preventDefault();
+
+            const savingsSelect = document.getElementById('importPdfSavingsId');
+            const savingsId = savingsSelect.value;
+            const savingOption = savingsSelect.options[savingsSelect.selectedIndex];
+            window.selectedSavingId = savingsId;
+            window.selectedSavingName = savingOption ? savingOption.getAttribute('data-name') : 'Rekening';
+
+            const fileInput = document.getElementById('pdfFileInput');
+            if (!fileInput.files || !fileInput.files[0]) {
+                alert('Silakan pilih file PDF terlebih dahulu.');
+                return;
+            }
+
+            const password = document.getElementById('importPdfPassword').value;
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('savings_id', savingsId);
+            if (password) {
+                formData.append('password', password);
+            }
+
+            // Tutup upload modal & buka loading modal
+            closePdfImportModal();
+            document.getElementById('pdfImportLoadingModal').classList.remove('hidden');
+
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                const response = await fetch("{{ route('transaction.import_pdf') }}", {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': csrfToken,
+                        'Accept': 'application/json',
+                    },
+                    body: formData,
+                });
+
+                const result = await response.json();
+                document.getElementById('pdfImportLoadingModal').classList.add('hidden');
+
+                if (!response.ok || result.status !== 'success') {
+                    alert(result.message || 'Gagal mengekstrak PDF. Silakan periksa format file atau password.');
+                    openPdfImportModal();
+                    return;
+                }
+
+                // Simpan transaksi dan buka review modal
+                window.currentPdfSummary = result.data;
+                window.currentPdfTransactions = (result.data.transactions || []).map((t, idx) => ({
+                    ...t,
+                    unique_id: idx,
+                    is_selected: true,
+                }));
+
+                populateReviewModal();
+                document.getElementById('pdfImportReviewModal').classList.remove('hidden');
+
+            } catch (err) {
+                document.getElementById('pdfImportLoadingModal').classList.add('hidden');
+                alert('Terjadi kesalahan jaringan atau server saat mengekstrak PDF: ' + err.message);
+                openPdfImportModal();
+            }
+        }
+
+        // Populate Review Modal & Render Rows
+        function populateReviewModal() {
+            document.getElementById('reviewTargetSavingBadge').textContent = window.selectedSavingName;
+            const finalBal = window.currentPdfSummary.final_balance;
+            const finalBalFmt = window.currentPdfSummary.final_balance_fmt || 'Rp 0';
+            
+            const balContainer = document.getElementById('updateBalanceContainer');
+            if (finalBal !== null && finalBal !== undefined) {
+                balContainer.classList.remove('hidden');
+                document.getElementById('reviewFinalBalanceLabel').textContent = finalBalFmt;
+            } else {
+                balContainer.classList.add('hidden');
+            }
+
+            renderReviewTable();
+        }
+
+        function setReviewFilter(type) {
+            window.currentReviewFilter = type;
+            
+            // Update Tab styles
+            ['filterTabAll', 'filterTabIn', 'filterTabOut'].forEach(id => {
+                const el = document.getElementById(id);
+                el.classList.remove('bg-white', 'text-gray-800', 'shadow-sm');
+                el.classList.add('text-gray-600');
+            });
+
+            if (type === 'all') {
+                document.getElementById('filterTabAll').classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+            } else if (type === 'Cash In') {
+                document.getElementById('filterTabIn').classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+            } else {
+                document.getElementById('filterTabOut').classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+            }
+
+            renderReviewTable();
+        }
+
+        function handleReviewSearch(query) {
+            window.currentReviewSearch = (query || '').toLowerCase().trim();
+            renderReviewTable();
+        }
+
+        function toggleSelectAll(masterCheckbox) {
+            const isChecked = masterCheckbox.checked;
+            const visibleRows = getFilteredTransactions();
+            visibleRows.forEach(row => {
+                const original = window.currentPdfTransactions.find(t => t.unique_id === row.unique_id);
+                if (original) original.is_selected = isChecked;
+            });
+            renderReviewTable();
+        }
+
+        function getFilteredTransactions() {
+            return window.currentPdfTransactions.filter(item => {
+                // Filter Type
+                if (window.currentReviewFilter !== 'all' && item.type !== window.currentReviewFilter) {
+                    return false;
+                }
+                // Filter Search
+                if (window.currentReviewSearch) {
+                    const descMatch = (item.description || '').toLowerCase().includes(window.currentReviewSearch);
+                    const amountMatch = String(item.amount || '').includes(window.currentReviewSearch);
+                    const catMatch = (item.category_name || '').toLowerCase().includes(window.currentReviewSearch);
+                    if (!descMatch && !amountMatch && !catMatch) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+
+        // Render Table Body
+        function renderReviewTable() {
+            const tbody = document.getElementById('reviewTableBody');
+            const emptyState = document.getElementById('reviewEmptyState');
+            const filtered = getFilteredTransactions();
+
+            // Hitung statistik
+            let totalIn = 0;
+            let totalOut = 0;
+            let selectedCount = 0;
+
+            window.currentPdfTransactions.forEach(t => {
+                if (t.is_selected) {
+                    selectedCount++;
+                    if (t.type === 'Cash In') totalIn += Number(t.amount || 0);
+                    else totalOut += Number(t.amount || 0);
+                }
+            });
+
+            document.getElementById('reviewTotalItemsBadge').textContent = window.currentPdfTransactions.length;
+            document.getElementById('reviewTotalCashInBadge').textContent = '+Rp ' + Number(totalIn).toLocaleString('id-ID');
+            document.getElementById('reviewTotalCashOutBadge').textContent = '-Rp ' + Number(totalOut).toLocaleString('id-ID');
+            document.getElementById('reviewCountVisible').textContent = filtered.length;
+            document.getElementById('reviewCountSelected').textContent = selectedCount;
+
+            const btnSave = document.getElementById('btnSaveImported');
+            if (selectedCount === 0) {
+                btnSave.disabled = true;
+                btnSave.classList.add('opacity-50', 'cursor-not-allowed');
+                document.getElementById('btnSaveImportedText').textContent = 'Pilih Transaksi';
+            } else {
+                btnSave.disabled = false;
+                btnSave.classList.remove('opacity-50', 'cursor-not-allowed');
+                document.getElementById('btnSaveImportedText').textContent = `Simpan ${selectedCount} Transaksi`;
+            }
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            tbody.innerHTML = filtered.map(row => {
+                const categoryOptions = window.availableCategories.map(cat => 
+                    `<option value="${cat.id}" ${cat.id == row.category_id ? 'selected' : ''}>${cat.name}</option>`
+                ).join('');
+
+                const budgetItemOptions = window.availableBudgetItems.map(item => 
+                    `<option value="${item.id}" ${item.id == row.budget_item_id ? 'selected' : ''}>${item.name}</option>`
+                ).join('');
+
+                const typeBadgeColor = row.type === 'Cash In' ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200';
+
+                return `
+                    <tr class="hover:bg-blue-50/40 transition-colors ${!row.is_selected ? 'opacity-40 bg-gray-50' : ''}" data-id="${row.unique_id}">
+                        <!-- Checkbox -->
+                        <td class="p-2.5 text-center">
+                            <input type="checkbox" onchange="updateRowField(${row.unique_id}, 'is_selected', this.checked)" ${row.is_selected ? 'checked' : ''}
+                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer">
+                        </td>
+
+                        <!-- Tanggal -->
+                        <td class="p-2.5">
+                            <input type="date" value="${row.transaction_date}" onchange="updateRowField(${row.unique_id}, 'transaction_date', this.value)"
+                                   class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-800 font-medium focus:ring-1 focus:ring-blue-500 outline-none">
+                        </td>
+
+                        <!-- Tipe -->
+                        <td class="p-2.5">
+                            <select onchange="updateRowField(${row.unique_id}, 'type', this.value)"
+                                    class="w-full border rounded-lg px-2 py-1 text-xs font-bold ${typeBadgeColor} focus:ring-1 focus:ring-blue-500 outline-none">
+                                <option value="Cash Out" ${row.type === 'Cash Out' ? 'selected' : ''}>Cash Out (Keluar)</option>
+                                <option value="Cash In" ${row.type === 'Cash In' ? 'selected' : ''}>Cash In (Masuk)</option>
+                                <option value="Transfer" ${row.type === 'Transfer' ? 'selected' : ''}>Transfer</option>
+                                <option value="Tabungan" ${row.type === 'Tabungan' ? 'selected' : ''}>Tabungan</option>
+                            </select>
+                        </td>
+
+                        <!-- Deskripsi -->
+                        <td class="p-2.5">
+                            <input type="text" value="${escapeHtml(row.description)}" onchange="updateRowField(${row.unique_id}, 'description', this.value)"
+                                   class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-800 font-medium focus:ring-1 focus:ring-blue-500 outline-none">
+                        </td>
+
+                        <!-- Kategori -->
+                        <td class="p-2.5">
+                            <select onchange="updateRowField(${row.unique_id}, 'category_id', this.value)"
+                                    class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-800 focus:ring-1 focus:ring-blue-500 outline-none">
+                                <option value="">-- Tanpa Kategori --</option>
+                                ${categoryOptions}
+                            </select>
+                        </td>
+
+                        <!-- Pos Anggaran -->
+                        <td class="p-2.5">
+                            <select onchange="updateRowField(${row.unique_id}, 'budget_item_id', this.value)"
+                                    class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-800 focus:ring-1 focus:ring-blue-500 outline-none">
+                                <option value="">-- Tanpa Anggaran --</option>
+                                ${budgetItemOptions}
+                            </select>
+                        </td>
+
+                        <!-- Nominal -->
+                        <td class="p-2.5 text-right">
+                            <input type="number" step="any" min="0" value="${row.amount}" onchange="updateRowField(${row.unique_id}, 'amount', parseFloat(this.value) || 0)"
+                                   class="w-full text-right bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs font-bold text-gray-800 focus:ring-1 focus:ring-blue-500 outline-none">
+                        </td>
+
+                        <!-- Saldo PDF -->
+                        <td class="p-2.5 text-right font-mono text-[11px] text-gray-500">
+                            ${row.balance_formatted || '-'}
+                        </td>
+
+                        <!-- Delete Row Button -->
+                        <td class="p-2.5 text-center">
+                            <button type="button" onclick="deleteReviewRow(${row.unique_id})" title="Hapus baris ini dari daftar import"
+                                    class="w-7 h-7 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg inline-flex items-center justify-center transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function updateRowField(uniqueId, field, value) {
+            const row = window.currentPdfTransactions.find(t => t.unique_id === uniqueId);
+            if (!row) return;
+            row[field] = value;
+            renderReviewTable();
+        }
+
+        function deleteReviewRow(uniqueId) {
+            window.currentPdfTransactions = window.currentPdfTransactions.filter(t => t.unique_id !== uniqueId);
+            renderReviewTable();
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return String(text)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        // Simpan Hasil Ekstraksi ke Database
+        async function submitImportedTransactions() {
+            const selectedRows = window.currentPdfTransactions.filter(t => t.is_selected);
+            if (selectedRows.length === 0) {
+                alert('Pilih minimal satu transaksi untuk disimpan.');
+                return;
+            }
+
+            const shouldUpdateBalance = document.getElementById('updateBalanceCheckbox').checked;
+            const finalBalance = window.currentPdfSummary.final_balance;
+
+            const btnSave = document.getElementById('btnSaveImported');
+            const originalText = btnSave.innerHTML;
+            btnSave.disabled = true;
+            btnSave.innerHTML = `
+                <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Menyimpan...
+            `;
+
+            try {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                const response = await fetch("{{ route('transaction.import_pdf_save') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        savings_id: window.selectedSavingId,
+                        update_balance: shouldUpdateBalance,
+                        final_balance: finalBalance,
+                        transactions: selectedRows.map(r => ({
+                            transaction_date: r.transaction_date,
+                            type: r.type,
+                            description: r.description,
+                            amount: r.amount,
+                            category_id: r.category_id || null,
+                            budget_item_id: r.budget_item_id || null,
+                            is_selected: true,
+                        })),
+                    }),
+                });
+
+                const result = await response.json();
+
+                if (!response.ok || result.status !== 'success') {
+                    alert(result.message || 'Gagal menyimpan transaksi ke database.');
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = originalText;
+                    return;
+                }
+
+                // Berhasil! Tutup review modal, tampilkan success modal, lalu refresh dashboard
+                document.getElementById('pdfImportReviewModal').classList.add('hidden');
+                document.getElementById('pdfImportSuccessMessage').textContent = result.message || 'Transaksi berhasil diimport!';
+                document.getElementById('pdfImportSuccessModal').classList.remove('hidden');
+
+                // Tunggu animasi 1.5 detik lalu refresh halaman secara otomatis
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1600);
+
+            } catch (err) {
+                alert('Terjadi kesalahan saat menyimpan: ' + err.message);
+                btnSave.disabled = false;
+                btnSave.innerHTML = originalText;
+            }
+        }
     </script>
 </x-app-layout>
