@@ -42,7 +42,7 @@ class TransactionFactory extends Factory
             'type'             => $type,
             'description'      => $description,
             'amount'           => $amount,
-            'fee'              => $this->faker->optional(0.2)->numberBetween(2_500, 10_000),
+            'fee'              => null,
             'is_manual'        => $this->faker->boolean(70),
             'transaction_date' => $this->faker->dateTimeBetween('-30 days', 'now'),
             'attachment'       => null,

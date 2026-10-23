@@ -295,3 +295,34 @@ test('import endpoint rejects non-xlsx files', function () {
     $response->assertRedirect();
     $response->assertSessionHas('error');
 });
+
+test('duplicate transaction handler correctly detects duplicate for bank account', function () {
+    $user = User::factory()->create();
+    $saving = Saving::factory()->create(['user_id' => $user->id]);
+
+    Transaction::create([
+        'user_id'          => $user->id,
+        'savings_id'       => $saving->id,
+        'transaction_date' => '2026-10-18',
+        'amount'           => 85000,
+        'description'      => 'Langganan Netflix Premium',
+        'type'             => 'Cash Out',
+        'direction'        => 'out',
+    ]);
+
+    $handler = app(\App\Services\DuplicateTransactionHandler::class);
+
+    // Sama persis nama dan jumlah pada bank yang sama
+    $dup = $handler->findDuplicate($user->id, $saving->id, 'langganan netflix premium', 85000);
+    expect($dup)->not->toBeNull();
+    expect($dup->description)->toBe('Langganan Netflix Premium');
+
+    // Berbeda nominal -> bukan duplikat
+    $nonDupAmount = $handler->findDuplicate($user->id, $saving->id, 'Langganan Netflix Premium', 100000);
+    expect($nonDupAmount)->toBeNull();
+
+    // Berbeda bank -> bukan duplikat
+    $otherSaving = Saving::factory()->create(['user_id' => $user->id]);
+    $nonDupBank = $handler->findDuplicate($user->id, $otherSaving->id, 'Langganan Netflix Premium', 85000);
+    expect($nonDupBank)->toBeNull();
+});

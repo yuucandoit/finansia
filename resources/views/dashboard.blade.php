@@ -12,7 +12,14 @@
                     <div class="relative z-10">
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6">
                             <div>
-                                <p class="text-blue-100 text-xs sm:text-sm font-medium mb-1 sm:mb-2">Total Saldo</p>
+                                <div class="flex items-center gap-2 mb-1 sm:mb-1.5">
+                                    <p class="text-blue-100 text-xs sm:text-sm font-medium">Total Kekayaan Bersih</p>
+                                    @if(($dashboard['net_worth']['change_pct'] ?? null) !== null)
+                                        <span class="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full font-bold {{ $dashboard['net_worth']['change'] >= 0 ? 'bg-green-500/25 text-green-200 border border-green-400/30' : 'bg-red-500/25 text-red-200 border border-red-400/30' }}">
+                                            {{ $dashboard['net_worth']['change'] >= 0 ? '▲ +' : '▼ ' }}{{ number_format(abs($dashboard['net_worth']['change']), 0, ',', '.') }} ({{ $dashboard['net_worth']['change_pct'] }}%) vs awal bulan
+                                        </span>
+                                    @endif
+                                </div>
                                 <h2 class="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight flex items-center flex-wrap gap-2">
                                     <span class="balance-amount break-all">
                                          Rp ••••••••
@@ -41,18 +48,27 @@
                             </div>
                         </div>
                         
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4 sm:mt-6">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
                             <!-- Cash In Card -->
                             <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-3.5 sm:p-4 border border-white/20">
                                 <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-green-400/30 rounded-xl flex items-center justify-center flex-shrink-0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5 sm:w-6 sm:h-6 text-green-300">
+                                    <div class="w-10 h-10 sm:w-11 sm:h-11 bg-green-400/30 rounded-xl flex items-center justify-center flex-shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5 text-green-300">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
                                         </svg>
                                     </div>
-                                    <div class="min-w-0">
+                                    <div class="min-w-0 flex-1">
                                         <p class="text-blue-100 text-[11px] sm:text-xs font-medium">Pemasukan Bulan Ini</p>
                                         <p class="text-white font-bold text-base sm:text-lg mt-0.5 truncate">Rp {{ number_format($cashInThisMonth ?? 0, 0, ',', '.') }}</p>
+                                        <p class="text-[10px] text-blue-200 mt-0.5 truncate">
+                                            @if(($dashboard['cashflow']['income']['change_pct'] ?? null) !== null)
+                                                <span class="{{ $dashboard['cashflow']['income']['change'] >= 0 ? 'text-green-300 font-bold' : 'text-yellow-300 font-bold' }}">
+                                                    {{ $dashboard['cashflow']['income']['change'] >= 0 ? '▲ +' : '▼ ' }}{{ $dashboard['cashflow']['income']['change_pct'] }}%
+                                                </span> vs bln lalu
+                                            @else
+                                                Arus kas murni
+                                            @endif
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -60,14 +76,74 @@
                             <!-- Cash Out Card -->
                             <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-3.5 sm:p-4 border border-white/20">
                                 <div class="flex items-center gap-3">
-                                    <div class="w-10 h-10 sm:w-12 sm:h-12 bg-red-400/30 rounded-xl flex items-center justify-center flex-shrink-0">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5 sm:w-6 sm:h-6 text-red-300">
+                                    <div class="w-10 h-10 sm:w-11 sm:h-11 bg-red-400/30 rounded-xl flex items-center justify-center flex-shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5 text-red-300">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6L9 12.75l4.286-4.286a11.948 11.948 0 014.306 6.43l.776 2.898m0 0l3.182-5.511m-3.182 5.51l-5.511-3.181" />
                                         </svg>
                                     </div>
-                                    <div class="min-w-0">
+                                    <div class="min-w-0 flex-1">
                                         <p class="text-blue-100 text-[11px] sm:text-xs font-medium">Pengeluaran Bulan Ini</p>
                                         <p class="text-white font-bold text-base sm:text-lg mt-0.5 truncate">Rp {{ number_format($cashOutThisMonth ?? 0, 0, ',', '.') }}</p>
+                                        <p class="text-[10px] text-blue-200 mt-0.5 truncate">
+                                            @if(($dashboard['cashflow']['expense']['change_pct'] ?? null) !== null)
+                                                <span class="{{ $dashboard['cashflow']['expense']['change'] <= 0 ? 'text-green-300 font-bold' : 'text-red-300 font-bold' }}">
+                                                    {{ $dashboard['cashflow']['expense']['change'] >= 0 ? '▲ +' : '▼ ' }}{{ $dashboard['cashflow']['expense']['change_pct'] }}%
+                                                </span> vs bln lalu
+                                            @else
+                                                Termasuk admin & fee
+                                            @endif
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Net Cash Flow Card -->
+                            @php
+                                $netAmount = $dashboard['cashflow']['net']['amount'] ?? ($cashInThisMonth - $cashOutThisMonth);
+                                $isSurplus = $netAmount >= 0;
+                            @endphp
+                            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-3.5 sm:p-4 border border-white/20">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 sm:w-11 sm:h-11 {{ $isSurplus ? 'bg-emerald-400/30 text-emerald-200' : 'bg-amber-400/30 text-amber-200' }} rounded-xl flex items-center justify-center flex-shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" class="w-5 h-5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center justify-between">
+                                            <p class="text-blue-100 text-[11px] sm:text-xs font-medium">Arus Kas Bersih</p>
+                                            <span class="text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase {{ $isSurplus ? 'bg-emerald-500/30 text-emerald-200' : 'bg-red-500/30 text-red-200' }}">
+                                                {{ $isSurplus ? 'Surplus' : 'Defisit' }}
+                                            </span>
+                                        </div>
+                                        <p class="text-white font-bold text-base sm:text-lg mt-0.5 truncate">
+                                            {{ $isSurplus ? '+' : '' }}Rp {{ number_format($netAmount, 0, ',', '.') }}
+                                        </p>
+                                        <p class="text-[10px] text-blue-200 mt-0.5 truncate">Pemasukan − Pengeluaran</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Savings Rate Card -->
+                            <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-3.5 sm:p-4 border border-white/20">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 sm:w-11 sm:h-11 bg-indigo-400/30 rounded-xl flex items-center justify-center flex-shrink-0 text-indigo-200">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor" class="w-5 h-5">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+                                        </svg>
+                                    </div>
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-blue-100 text-[11px] sm:text-xs font-medium">Tingkat Tabungan</p>
+                                        <p class="text-white font-bold text-base sm:text-lg mt-0.5 truncate">
+                                            {{ ($dashboard['cashflow']['savings_rate'] ?? null) !== null ? $dashboard['cashflow']['savings_rate'] . '%' : '-' }}
+                                        </p>
+                                        <p class="text-[10px] text-blue-200 mt-0.5 truncate">
+                                            @if(($dashboard['cashflow']['internal_transfer'] ?? 0) > 0)
+                                                Pindah rekening: Rp {{ number_format($dashboard['cashflow']['internal_transfer'], 0, ',', '.') }}
+                                            @else
+                                                Rasio kas tersimpan
+                                            @endif
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -76,24 +152,129 @@
                 </div>
             </div>
 
+            <!-- Uncategorized Warning Alert (Jika ada transaksi tanpa kategori) -->
+            @if(($dashboard['uncategorized']['count'] ?? 0) > 0)
+                <div class="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                    <div class="flex items-start gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h4 class="text-sm font-bold text-amber-900">{{ $dashboard['uncategorized']['count'] }} Transaksi Belum Memiliki Kategori</h4>
+                            <p class="text-xs text-amber-700">Total nominal Rp {{ number_format($dashboard['uncategorized']['amount'], 0, ',', '.') }} belum dikategorikan. Memberi kategori membantu visualisasi ke mana uang Anda pergi.</p>
+                        </div>
+                    </div>
+                    <a href="{{ route('transaction.index') }}" class="inline-flex items-center justify-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition-colors whitespace-nowrap shadow-sm">
+                        Beri Kategori Sekarang →
+                    </a>
+                </div>
+            @endif
+
+            <!-- Grid Rekening & Ringkasan Anggaran -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
+                <!-- Rekening Tabungan User -->
+                <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h3 class="text-base sm:text-lg font-bold text-gray-800">Saldo per Rekening</h3>
+                            <p class="text-xs text-gray-500">Pergerakan dana dan likuiditas di tiap kantong</p>
+                        </div>
+                        <a href="{{ route('saving.index') }}" class="text-xs text-blue-600 hover:text-blue-700 font-semibold hover:underline">
+                            Kelola Rekening →
+                        </a>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                        @forelse(($dashboard['accounts'] ?? []) as $acc)
+                            <div class="p-3.5 bg-gray-50 hover:bg-blue-50/40 rounded-xl border border-gray-100 transition-colors">
+                                <div class="flex items-center justify-between gap-1 mb-1">
+                                    <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded uppercase">{{ $acc['bank'] ?? 'Bank' }}</span>
+                                    <span class="text-[10px] font-bold {{ ($acc['change_this_month'] ?? 0) >= 0 ? 'text-green-600' : 'text-red-500' }}">
+                                        {{ ($acc['change_this_month'] ?? 0) >= 0 ? '+' : '' }}Rp {{ number_format($acc['change_this_month'] ?? 0, 0, ',', '.') }}
+                                    </span>
+                                </div>
+                                <p class="text-xs font-bold text-gray-800 truncate">{{ $acc['name'] }}</p>
+                                <p class="text-sm sm:text-base font-extrabold text-gray-900 mt-0.5">
+                                    Rp {{ number_format($acc['balance'] ?? 0, 0, ',', '.') }}
+                                </p>
+                            </div>
+                        @empty
+                            <p class="text-xs text-gray-400 col-span-3 py-3 text-center">Belum ada rekening terdaftar.</p>
+                        @endforelse
+                    </div>
+                </div>
+
+                <!-- Ringkasan Anggaran Pos -->
+                <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 class="text-base sm:text-lg font-bold text-gray-800">Anggaran Pos</h3>
+                                <p class="text-xs text-gray-500">{{ $dashboard['period']['label'] ?? 'Bulan Ini' }}</p>
+                            </div>
+                            <span class="text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-full font-extrabold uppercase {{ ($dashboard['budget']['status'] ?? 'safe') === 'safe' ? 'bg-green-100 text-green-700' : (($dashboard['budget']['status'] ?? '') === 'warning' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-700') }}">
+                                {{ ($dashboard['budget']['status'] ?? 'safe') === 'safe' ? 'Aman' : (($dashboard['budget']['status'] ?? '') === 'warning' ? 'Waspada' : 'Overbudget') }}
+                            </span>
+                        </div>
+                        @if(($dashboard['budget']['has_budget'] ?? false))
+                            <div class="space-y-2 mt-2">
+                                <div class="flex justify-between text-xs text-gray-600">
+                                    <span>Terpakai ({{ $dashboard['budget']['percentage'] }}%)</span>
+                                    <span class="font-bold text-gray-900">Rp {{ number_format($dashboard['budget']['spent'], 0, ',', '.') }}</span>
+                                </div>
+                                <div class="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                                    <div class="h-2.5 rounded-full {{ ($dashboard['budget']['status'] ?? '') === 'safe' ? 'bg-green-500' : (($dashboard['budget']['status'] ?? '') === 'warning' ? 'bg-yellow-500' : 'bg-red-500') }}" style="width: {{ min(100, $dashboard['budget']['percentage']) }}%"></div>
+                                </div>
+                                <div class="flex justify-between items-center text-[11px] text-gray-500 pt-1">
+                                    <span>Total Plafon: <strong class="text-gray-700">Rp {{ number_format($dashboard['budget']['total'], 0, ',', '.') }}</strong></span>
+                                    <span>Sisa: <strong class="{{ $dashboard['budget']['remaining'] >= 0 ? 'text-green-600' : 'text-red-600' }}">Rp {{ number_format($dashboard['budget']['remaining'], 0, ',', '.') }}</strong></span>
+                                </div>
+                            </div>
+                        @else
+                            <div class="py-3 text-center">
+                                <p class="text-xs text-gray-400">Belum ada anggaran pos yang ditetapkan untuk bulan ini.</p>
+                                <a href="{{ route('budget.index') }}" class="inline-block mt-3 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors">
+                                    + Tetapkan Anggaran
+                                </a>
+                            </div>
+                        @endif
+                    </div>
+                    @if(($dashboard['budget']['has_budget'] ?? false))
+                        <div class="pt-3 border-t border-gray-100 mt-3 text-right">
+                            <a href="{{ route('budget.index') }}" class="text-xs text-blue-600 hover:text-blue-700 font-semibold hover:underline">
+                                Lihat Rincian Pos Anggaran →
+                            </a>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
             <!-- Charts Grid -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
                 
                 <!-- Cash Flow Chart (Bar) -->
                 <div class="lg:col-span-2 bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100">
-                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 sm:mb-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
                         <div>
-                            <h3 class="text-base sm:text-lg font-bold text-gray-800">Cash Flow</h3>
-                            <p class="text-xs sm:text-sm text-gray-500">7 Hari Terakhir</p>
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-base sm:text-lg font-bold text-gray-800">Arus Kas (Cash Flow)</h3>
+                                <!-- Mode Switcher Toggle -->
+                                <div class="inline-flex bg-gray-100 p-0.5 rounded-lg text-xs font-semibold">
+                                    <button type="button" id="btnFlow7Days" onclick="switchCashFlowMode('7days')" class="px-2.5 py-1 rounded-md bg-white text-gray-800 shadow-sm transition-all">7 Hari</button>
+                                    <button type="button" id="btnFlow12Months" onclick="switchCashFlowMode('12months')" class="px-2.5 py-1 rounded-md text-gray-500 hover:text-gray-800 transition-all">12 Bulan</button>
+                                </div>
+                            </div>
+                            <p id="flowSubtitle" class="text-xs sm:text-sm text-gray-500 mt-0.5">7 Hari Terakhir</p>
                         </div>
                         <div class="flex gap-4">
                             <div class="flex items-center gap-1.5">
                                 <div class="w-3 h-3 bg-green-500 rounded"></div>
-                                <span class="text-xs font-medium text-gray-600">Cash In</span>
+                                <span class="text-xs font-medium text-gray-600">Pemasukan</span>
                             </div>
                             <div class="flex items-center gap-1.5">
                                 <div class="w-3 h-3 bg-red-500 rounded"></div>
-                                <span class="text-xs font-medium text-gray-600">Cash Out</span>
+                                <span class="text-xs font-medium text-gray-600">Pengeluaran</span>
                             </div>
                         </div>
                     </div>
@@ -103,13 +284,33 @@
                 </div>
 
                 <!-- Expense Categories Chart (Donut) -->
-                <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100">
-                    <div class="mb-4 sm:mb-6">
-                        <h3 class="text-base sm:text-lg font-bold text-gray-800">Kategori Pengeluaran</h3>
-                        <p class="text-xs sm:text-sm text-gray-500">Top 5 Bulan Ini</p>
+                <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100 flex flex-col justify-between">
+                    <div>
+                        <div class="mb-3">
+                            <h3 class="text-base sm:text-lg font-bold text-gray-800">Alokasi Pengeluaran</h3>
+                            <p class="text-xs text-gray-500">Persentase ke mana uang pergi bulan ini</p>
+                        </div>
+                        <div class="h-48 sm:h-52 flex items-center justify-center relative w-full overflow-hidden">
+                            <canvas id="expenseDonutChart"></canvas>
+                        </div>
                     </div>
-                    <div class="h-60 sm:h-72 flex items-center justify-center relative w-full overflow-hidden">
-                        <canvas id="expenseDonutChart"></canvas>
+                    
+                    <!-- Breakdown Kategori Lengkap -->
+                    <div class="mt-3 pt-3 border-t border-gray-100 max-h-40 overflow-y-auto space-y-1.5 text-xs">
+                        @forelse(($dashboard['spending_by_category'] ?? []) as $cat)
+                            <div class="flex items-center justify-between text-gray-700 py-0.5">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: {{ $cat['color'] ?? '#9ca3af' }}"></span>
+                                    <span class="truncate font-medium">{{ $cat['name'] }}</span>
+                                </div>
+                                <div class="flex items-center gap-2 text-right flex-shrink-0">
+                                    <span class="text-gray-400 font-mono text-[11px]">{{ $cat['pct'] }}%</span>
+                                    <span class="font-bold text-gray-900">Rp {{ number_format($cat['amount'], 0, ',', '.') }}</span>
+                                </div>
+                            </div>
+                        @empty
+                            <p class="text-xs text-gray-400 text-center py-2">Belum ada pengeluaran bulan ini.</p>
+                        @endforelse
                     </div>
                 </div>
             </div>
@@ -144,6 +345,49 @@
                     <canvas id="balanceTrendChart"></canvas>
                 </div>
             </div>
+
+            <!-- Top 5 Pengeluaran Terbesar Bulan Ini -->
+            @if(!empty($dashboard['top_expenses']))
+                <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-4 sm:p-6 mb-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div>
+                            <h3 class="text-base sm:text-lg font-bold text-gray-800">Top Pengeluaran Terbesar</h3>
+                            <p class="text-xs text-gray-500">Transaksi bernominal tertinggi di {{ $dashboard['period']['label'] ?? 'bulan ini' }}</p>
+                        </div>
+                        <span class="text-xs font-semibold text-gray-400 bg-gray-50 px-2.5 py-1 rounded-lg">Fokus Efisiensi</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">
+                                <tr>
+                                    <th class="py-2.5 px-3">Tanggal</th>
+                                    <th class="py-2.5 px-3">Keterangan</th>
+                                    <th class="py-2.5 px-3">Kategori</th>
+                                    <th class="py-2.5 px-3">Rekening</th>
+                                    <th class="py-2.5 px-3 text-right">Nominal</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                @foreach($dashboard['top_expenses'] as $top)
+                                    <tr class="hover:bg-gray-50/60 transition-colors">
+                                        <td class="py-2.5 px-3 text-gray-500 whitespace-nowrap">{{ \Carbon\Carbon::parse($top['date'])->translatedFormat('d M Y') }}</td>
+                                        <td class="py-2.5 px-3 font-bold text-gray-800">{{ $top['description'] }}</td>
+                                        <td class="py-2.5 px-3">
+                                            <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700">
+                                                {{ $top['category'] ?? 'Tanpa Kategori' }}
+                                            </span>
+                                        </td>
+                                        <td class="py-2.5 px-3 text-gray-500">{{ $top['account'] ?? '-' }}</td>
+                                        <td class="py-2.5 px-3 text-right font-extrabold text-red-600 whitespace-nowrap">
+                                            -Rp {{ number_format($top['amount'], 0, ',', '.') }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endif
 
             <!-- Recent Transactions -->
             <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
@@ -228,24 +472,32 @@
             }).format(number);
         }
 
-        // 1. Cash Flow Bar Chart
+        // 1. Cash Flow Bar Chart (Support 7 Hari & 12 Bulan Mode)
         const cashFlowCtx = document.getElementById('cashFlowChart').getContext('2d');
-        new Chart(cashFlowCtx, {
+        const labels7Days = @json($last7Days);
+        const cashIn7Days = @json($cashInData);
+        const cashOut7Days = @json($cashOutData);
+
+        const labels12Months = @json($dashboard['charts']['monthly_12']['labels'] ?? []);
+        const cashIn12Months = @json($dashboard['charts']['monthly_12']['income'] ?? []);
+        const cashOut12Months = @json($dashboard['charts']['monthly_12']['expense'] ?? []);
+
+        const cashFlowChart = new Chart(cashFlowCtx, {
             type: 'bar',
             data: {
-                labels: @json($last7Days),
+                labels: labels7Days,
                 datasets: [
                     {
-                        label: 'Cash In',
-                        data: @json($cashInData),
-                        backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                        label: 'Pemasukan',
+                        data: cashIn7Days,
+                        backgroundColor: 'rgba(34, 197, 94, 0.85)',
                         borderRadius: 8,
                         borderSkipped: false,
                     },
                     {
-                        label: 'Cash Out',
-                        data: @json($cashOutData),
-                        backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                        label: 'Pengeluaran',
+                        data: cashOut7Days,
+                        backgroundColor: 'rgba(239, 68, 68, 0.85)',
                         borderRadius: 8,
                         borderSkipped: false,
                     }
@@ -257,9 +509,9 @@
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
                         padding: 12,
-                        borderRadius: 8,
+                        borderRadius: 10,
                         callbacks: {
                             label: function(context) {
                                 return context.dataset.label + ': ' + formatRupiah(context.raw);
@@ -275,7 +527,8 @@
                         },
                         ticks: {
                             callback: function(value) {
-                                return 'Rp ' + (value / 1000) + 'K';
+                                if (value >= 1000000) return 'Rp ' + (value / 1000000).toFixed(1) + 'jt';
+                                return 'Rp ' + (value / 1000) + 'k';
                             },
                             font: { size: 11 }
                         }
@@ -288,40 +541,64 @@
             }
         });
 
+        function switchCashFlowMode(mode) {
+            const btn7 = document.getElementById('btnFlow7Days');
+            const btn12 = document.getElementById('btnFlow12Months');
+            const subtitle = document.getElementById('flowSubtitle');
+
+            if (mode === '7days') {
+                cashFlowChart.data.labels = labels7Days;
+                cashFlowChart.data.datasets[0].data = cashIn7Days;
+                cashFlowChart.data.datasets[1].data = cashOut7Days;
+                if (subtitle) subtitle.textContent = '7 Hari Terakhir';
+
+                btn7.className = 'px-2.5 py-1 rounded-md bg-white text-gray-800 shadow-sm transition-all';
+                btn12.className = 'px-2.5 py-1 rounded-md text-gray-500 hover:text-gray-800 transition-all';
+            } else {
+                cashFlowChart.data.labels = labels12Months;
+                cashFlowChart.data.datasets[0].data = cashIn12Months;
+                cashFlowChart.data.datasets[1].data = cashOut12Months;
+                if (subtitle) subtitle.textContent = '12 Bulan Terakhir';
+
+                btn12.className = 'px-2.5 py-1 rounded-md bg-white text-gray-800 shadow-sm transition-all';
+                btn7.className = 'px-2.5 py-1 rounded-md text-gray-500 hover:text-gray-800 transition-all';
+            }
+            cashFlowChart.update();
+        }
+
         // 2. Expense Donut Chart
         const expenseCtx = document.getElementById('expenseDonutChart').getContext('2d');
         const expenseLabels = @json($expenseLabels);
         const expenseData = @json($expenseData);
-        
+
+        const categoryPalette = [
+            'rgba(239, 68, 68, 0.85)',
+            'rgba(249, 115, 22, 0.85)',
+            'rgba(234, 179, 8, 0.85)',
+            'rgba(16, 185, 129, 0.85)',
+            'rgba(59, 130, 246, 0.85)',
+            'rgba(139, 92, 246, 0.85)',
+            'rgba(236, 72, 153, 0.85)',
+            'rgba(100, 116, 139, 0.85)'
+        ];
+
         new Chart(expenseCtx, {
             type: 'doughnut',
             data: {
                 labels: expenseLabels.length > 0 ? expenseLabels : ['Belum ada data'],
                 datasets: [{
                     data: expenseData.length > 0 ? expenseData : [1],
-                    backgroundColor: [
-                        'rgba(239, 68, 68, 0.8)',
-                        'rgba(251, 146, 60, 0.8)',
-                        'rgba(250, 204, 21, 0.8)',
-                        'rgba(34, 197, 94, 0.8)',
-                        'rgba(59, 130, 246, 0.8)'
-                    ],
+                    backgroundColor: expenseLabels.length > 0 ? categoryPalette.slice(0, expenseLabels.length) : ['#e2e8f0'],
                     borderWidth: 0,
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '65%',
+                cutout: '70%',
                 plugins: {
                     legend: {
-                        position: 'bottom',
-                        labels: {
-                            padding: 15,
-                            font: { size: 11 },
-                            usePointStyle: true,
-                            pointStyle: 'circle'
-                        }
+                        display: false // Ditampilkan via list HTML di bawah canvas agar rapi
                     },
                     tooltip: {
                         backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -610,13 +887,14 @@
                 <div class="p-4 sm:p-6 bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-950 text-white flex-shrink-0">
                     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
-                            <div class="flex items-center gap-2 mb-1">
+                            <div class="flex items-center gap-2 mb-1 flex-wrap">
                                 <span class="bg-blue-500/20 text-blue-300 border border-blue-400/30 text-[11px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                                     Hasil Ekstraksi PDF
                                 </span>
                                 <span id="reviewTargetSavingBadge" class="bg-white/10 text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
                                     Rekening
                                 </span>
+                                <span id="reviewParserBadge" class="hidden text-[11px] font-semibold px-2.5 py-0.5 rounded-full"></span>
                             </div>
                             <h2 class="text-lg sm:text-2xl font-black tracking-tight">Verifikasi & Sesuaikan Transaksi</h2>
                             <p class="text-xs text-blue-200 mt-0.5">Periksa, ubah nominal/kategori, atau hapus baris sebelum menyimpan ke catatan finansial.</p>
@@ -636,7 +914,30 @@
                                 <p class="text-[10px] text-red-300 uppercase font-semibold">Total Keluar</p>
                                 <p id="reviewTotalCashOutBadge" class="text-sm font-extrabold text-red-400">-Rp 0</p>
                             </div>
+                            <div id="reviewDuplicateStatBox" class="hidden bg-amber-500/20 border border-amber-400/40 px-3 py-1.5 rounded-xl">
+                                <p class="text-[10px] text-amber-300 uppercase font-semibold">Duplikat</p>
+                                <p id="reviewTotalDuplicatesBadge" class="text-sm font-extrabold text-amber-300">0</p>
+                            </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Duplicate Alert Banner -->
+                <div id="pdfDuplicateAlertBanner" class="hidden mx-4 sm:mx-6 mt-3 p-3.5 bg-amber-50/90 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 shadow-sm flex-shrink-0">
+                    <div class="flex items-center gap-3">
+                        <span class="text-xl">⚠️</span>
+                        <div>
+                            <p class="font-bold text-amber-950"><span id="duplicateAlertCount">0</span> transaksi terdeteksi serupa pada rekening ini.</p>
+                            <p class="text-[11px] text-amber-800">Berdasarkan nama transaksi dan nominal yang cocok dengan catatan sebelumnya. Transaksi duplikat otomatis di-uncheck agar tidak tercatat ganda.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <button type="button" onclick="selectOnlyNewTransactions()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl text-xs transition-colors shadow-sm">
+                            Pilih Hanya Transaksi Baru
+                        </button>
+                        <button type="button" onclick="selectAllTransactions()" class="px-3 py-1.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold rounded-xl text-xs transition-colors">
+                            Pilih Semua
+                        </button>
                     </div>
                 </div>
 
@@ -654,6 +955,7 @@
                             <button type="button" onclick="setReviewFilter('all')" id="filterTabAll" class="filter-tab px-3 py-1 rounded-lg bg-white text-gray-800 shadow-sm transition-all">Semua</button>
                             <button type="button" onclick="setReviewFilter('Cash In')" id="filterTabIn" class="filter-tab px-3 py-1 rounded-lg text-gray-600 hover:text-gray-800 transition-all">Pemasukan</button>
                             <button type="button" onclick="setReviewFilter('Cash Out')" id="filterTabOut" class="filter-tab px-3 py-1 rounded-lg text-gray-600 hover:text-gray-800 transition-all">Pengeluaran</button>
+                            <button type="button" onclick="setReviewFilter('duplicate')" id="filterTabDuplicate" class="filter-tab hidden px-3 py-1 rounded-lg text-amber-800 hover:text-amber-950 transition-all">⚠️ Duplikat (<span id="filterTabDuplicateCount">0</span>)</button>
                         </div>
 
                         <!-- Search Box -->
@@ -886,7 +1188,7 @@
                 window.currentPdfTransactions = (result.data.transactions || []).map((t, idx) => ({
                     ...t,
                     unique_id: idx,
-                    is_selected: true,
+                    is_selected: t.is_selected !== undefined ? Boolean(t.is_selected) : !Boolean(t.is_duplicate),
                 }));
 
                 populateReviewModal();
@@ -902,6 +1204,19 @@
         // Populate Review Modal & Render Rows
         function populateReviewModal() {
             document.getElementById('reviewTargetSavingBadge').textContent = window.selectedSavingName;
+            
+            const parserBadge = document.getElementById('reviewParserBadge');
+            if (parserBadge && window.currentPdfSummary) {
+                parserBadge.classList.remove('hidden');
+                if (window.currentPdfSummary.is_ai_parsed) {
+                    parserBadge.className = 'bg-purple-500/25 text-purple-200 border border-purple-400/40 text-[11px] font-semibold px-2.5 py-0.5 rounded-full';
+                    parserBadge.textContent = '✨ AI Extractor';
+                } else if (window.currentPdfSummary.parser_name) {
+                    parserBadge.className = 'bg-emerald-500/25 text-emerald-200 border border-emerald-400/40 text-[11px] font-semibold px-2.5 py-0.5 rounded-full';
+                    parserBadge.textContent = '⚡ ' + window.currentPdfSummary.parser_name;
+                }
+            }
+
             const finalBal = window.currentPdfSummary.final_balance;
             const finalBalFmt = window.currentPdfSummary.final_balance_fmt || 'Rp 0';
             
@@ -913,6 +1228,31 @@
                 balContainer.classList.add('hidden');
             }
 
+            // Update badge dan alert duplikat
+            const dupCount = Number(window.currentPdfSummary.duplicate_count || 0);
+            const dupStatBox = document.getElementById('reviewDuplicateStatBox');
+            const dupAlertBanner = document.getElementById('pdfDuplicateAlertBanner');
+            const dupFilterTab = document.getElementById('filterTabDuplicate');
+
+            if (dupCount > 0) {
+                if (dupStatBox) {
+                    dupStatBox.classList.remove('hidden');
+                    document.getElementById('reviewTotalDuplicatesBadge').textContent = dupCount;
+                }
+                if (dupAlertBanner) {
+                    dupAlertBanner.classList.remove('hidden');
+                    document.getElementById('duplicateAlertCount').textContent = dupCount;
+                }
+                if (dupFilterTab) {
+                    dupFilterTab.classList.remove('hidden');
+                    document.getElementById('filterTabDuplicateCount').textContent = dupCount;
+                }
+            } else {
+                if (dupStatBox) dupStatBox.classList.add('hidden');
+                if (dupAlertBanner) dupAlertBanner.classList.add('hidden');
+                if (dupFilterTab) dupFilterTab.classList.add('hidden');
+            }
+
             renderReviewTable();
         }
 
@@ -920,18 +1260,32 @@
             window.currentReviewFilter = type;
             
             // Update Tab styles
-            ['filterTabAll', 'filterTabIn', 'filterTabOut'].forEach(id => {
+            ['filterTabAll', 'filterTabIn', 'filterTabOut', 'filterTabDuplicate'].forEach(id => {
                 const el = document.getElementById(id);
-                el.classList.remove('bg-white', 'text-gray-800', 'shadow-sm');
-                el.classList.add('text-gray-600');
+                if (el) {
+                    el.classList.remove('bg-white', 'text-gray-800', 'shadow-sm', 'bg-amber-100', 'text-amber-950');
+                    el.classList.add('text-gray-600');
+                }
             });
 
             if (type === 'all') {
-                document.getElementById('filterTabAll').classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+                const el = document.getElementById('filterTabAll');
+                el.classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+                el.classList.remove('text-gray-600');
             } else if (type === 'Cash In') {
-                document.getElementById('filterTabIn').classList.add('bg-white', 'text-gray-800', 'shadow-sm');
-            } else {
-                document.getElementById('filterTabOut').classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+                const el = document.getElementById('filterTabIn');
+                el.classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+                el.classList.remove('text-gray-600');
+            } else if (type === 'Cash Out') {
+                const el = document.getElementById('filterTabOut');
+                el.classList.add('bg-white', 'text-gray-800', 'shadow-sm');
+                el.classList.remove('text-gray-600');
+            } else if (type === 'duplicate') {
+                const el = document.getElementById('filterTabDuplicate');
+                if (el) {
+                    el.classList.add('bg-amber-100', 'text-amber-950', 'shadow-sm');
+                    el.classList.remove('text-gray-600');
+                }
             }
 
             renderReviewTable();
@@ -952,10 +1306,30 @@
             renderReviewTable();
         }
 
+        function selectOnlyNewTransactions() {
+            window.currentPdfTransactions.forEach(t => {
+                t.is_selected = !t.is_duplicate;
+            });
+            const masterCb = document.getElementById('selectAllCheckbox');
+            if (masterCb) masterCb.checked = false;
+            renderReviewTable();
+        }
+
+        function selectAllTransactions() {
+            window.currentPdfTransactions.forEach(t => {
+                t.is_selected = true;
+            });
+            const masterCb = document.getElementById('selectAllCheckbox');
+            if (masterCb) masterCb.checked = true;
+            renderReviewTable();
+        }
+
         function getFilteredTransactions() {
             return window.currentPdfTransactions.filter(item => {
                 // Filter Type
-                if (window.currentReviewFilter !== 'all' && item.type !== window.currentReviewFilter) {
+                if (window.currentReviewFilter === 'duplicate') {
+                    if (!item.is_duplicate) return false;
+                } else if (window.currentReviewFilter !== 'all' && item.type !== window.currentReviewFilter) {
                     return false;
                 }
                 // Filter Search
@@ -1024,9 +1398,24 @@
                 ).join('');
 
                 const typeBadgeColor = row.type === 'Cash In' ? 'text-green-600 bg-green-50 border-green-200' : 'text-red-600 bg-red-50 border-red-200';
+                const isDup = Boolean(row.is_duplicate);
+                const rowBgClass = isDup
+                    ? (row.is_selected ? 'bg-amber-50/50 hover:bg-amber-100/40 border-l-4 border-l-amber-400' : 'bg-amber-50/20 opacity-50')
+                    : (!row.is_selected ? 'opacity-40 bg-gray-50' : 'hover:bg-blue-50/40');
+
+                const duplicateInfoHtml = isDup ? `
+                    <div class="flex items-center gap-1.5 mt-1">
+                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300" title="${escapeHtml(row.duplicate_reason || 'Terdeteksi serupa')}">
+                            ⚠️ Duplikat
+                        </span>
+                        <span class="text-[10px] text-amber-800 truncate max-w-xs" title="${escapeHtml(row.duplicate_reason || '')}">
+                            ${escapeHtml(row.duplicate_reason || 'Sudah tercatat di rekening ini')}
+                        </span>
+                    </div>
+                ` : '';
 
                 return `
-                    <tr class="hover:bg-blue-50/40 transition-colors ${!row.is_selected ? 'opacity-40 bg-gray-50' : ''}" data-id="${row.unique_id}">
+                    <tr class="transition-colors ${rowBgClass}" data-id="${row.unique_id}">
                         <!-- Checkbox -->
                         <td class="p-2.5 text-center">
                             <input type="checkbox" onchange="updateRowField(${row.unique_id}, 'is_selected', this.checked)" ${row.is_selected ? 'checked' : ''}
@@ -1053,7 +1442,8 @@
                         <!-- Deskripsi -->
                         <td class="p-2.5">
                             <input type="text" value="${escapeHtml(row.description)}" onchange="updateRowField(${row.unique_id}, 'description', this.value)"
-                                   class="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-800 font-medium focus:ring-1 focus:ring-blue-500 outline-none">
+                                   class="w-full bg-white border ${isDup ? 'border-amber-300' : 'border-gray-200'} rounded-lg px-2 py-1 text-xs text-gray-800 font-medium focus:ring-1 focus:ring-blue-500 outline-none">
+                            ${duplicateInfoHtml}
                         </td>
 
                         <!-- Kategori -->

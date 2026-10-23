@@ -2,114 +2,36 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Transaction;
+use App\Models\Budget;
+use App\Models\Category;
 use App\Models\Saving;
-use Carbon\Carbon;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use App\Models\Transaction;
+use App\Services\DashboardService;
 
 class DashboardController extends Controller
 {
-    public function index()
+    public function index(DashboardService $dashboardService)
     {
-        $userId = auth()->id();
-        
-        // Total Saldo dari semua tabungan
-        $totalBalance = Saving::where('user_id', $userId)->sum('current_balance');
-        
-        // Cash In & Cash Out bulan ini
-        $startOfMonth = Carbon::now()->startOfMonth();
-        $endOfMonth = Carbon::now()->endOfMonth();
-        
-        $cashInThisMonth = Transaction::where('user_id', $userId)
-            ->where('type', 'Cash In')
-            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
-            ->sum('amount');
-            
-        $cashOutThisMonth = Transaction::where('user_id', $userId)
-            ->whereIn('type', ['Cash Out', 'Transfer', 'Tabungan'])
-            ->whereBetween('transaction_date', [$startOfMonth, $endOfMonth])
-            ->sum('amount');
-        
-        // Data untuk Bar Chart - Cash Flow 7 hari terakhir
-        $last7Days = [];
-        $cashInData = [];
-        $cashOutData = [];
-        
-        for ($i = 6; $i >= 0; $i--) {
-            $date = Carbon::now()->subDays($i);
-            $last7Days[] = $date->format('d M');
-            
-            $cashIn = Transaction::where('user_id', $userId)
-                ->where('type', 'Cash In')
-                ->whereDate('transaction_date', $date)
-                ->sum('amount');
-            $cashInData[] = $cashIn;
-            
-            $cashOut = Transaction::where('user_id', $userId)
-                ->whereIn('type', ['Cash Out', 'Transfer', 'Tabungan'])
-                ->whereDate('transaction_date', $date)
-                ->sum('amount');
-            $cashOutData[] = $cashOut;
-        }
-        
-        // Data untuk Donut Chart - Top 5 Kategori Pengeluaran Bulan Ini
-        $topExpenses = Transaction::leftJoin('categories', 'transactions.category_id', '=', 'categories.id')
-            ->where('transactions.user_id', $userId)
-            ->whereIn('transactions.type', ['Cash Out'])
-            ->whereBetween('transactions.transaction_date', [$startOfMonth, $endOfMonth])
-            ->select(DB::raw("COALESCE(categories.name, 'Lainnya') as category_name"), DB::raw('SUM(transactions.amount) as total'))
-            ->groupBy('category_name')
-            ->orderByDesc('total')
-            ->limit(5)
-            ->get();
-        
-        $expenseLabels = $topExpenses->pluck('category_name')->toArray();
-        $expenseData = $topExpenses->pluck('total')->toArray();
-        
-        // Data untuk Line Chart - Trend Saldo 30 hari terakhir
-        $last30Days = [];
-        $balanceTrend = [];
-        $runningBalance = $totalBalance;
-        
-        // Hitung saldo dari hari ini mundur ke 30 hari lalu
-        for ($i = 0; $i <= 29; $i++) {
-            $date = Carbon::now()->subDays($i);
-            
-            // Transaksi pada hari ini
-            $dayTransactions = Transaction::where('user_id', $userId)
-                ->whereDate('transaction_date', $date)
-                ->get();
-            
-            // Kurangi saldo dengan transaksi hari ini (karena kita mundur)
-            foreach ($dayTransactions as $trans) {
-                if ($trans->type == 'Cash In') {
-                    $runningBalance -= $trans->amount;
-                } else {
-                    $runningBalance += $trans->amount;
-                }
-            }
-            
-            // Simpan untuk ditampilkan terbalik nanti
-            $last30Days[] = $date->format('d M');
-            $balanceTrend[] = $runningBalance;
-        }
-        
-        // Balik array agar urut dari 30 hari lalu ke hari ini
-        $last30Days = array_reverse($last30Days);
-        $balanceTrend = array_reverse($balanceTrend);
-        
+        $user = auth()->user();
+        $userId = $user->id;
+
+        $dashboard = $dashboardService->build($user);
+
+        $charts = $dashboard['charts'];
+        $spending = collect($dashboard['spending_by_category']);
+
         // Transaksi terakhir
-        $recentTransactions = Transaction::where('user_id', $userId)
-            ->orderBy('transaction_date','DESC')
+        $recentTransactions = Transaction::with(['category', 'savingAccount'])
+            ->where('user_id', $userId)
+            ->orderBy('transaction_date', 'DESC')
+            ->orderBy('id', 'DESC')
             ->limit(5)
             ->get();
 
         // Savings accounts & categories untuk fitur import dan transaksi
         $savings = Saving::where('user_id', $userId)->with('bank')->get();
-        $categories = \App\Models\Category::orderBy('name')->get();
-        $activeBudget = \App\Models\Budget::with('items.category')
+        $categories = Category::orderBy('name')->get();
+        $activeBudget = Budget::with('items.category')
             ->where('user_id', $userId)
             ->where('month', (int) now()->month)
             ->where('year', (int) now()->year)
@@ -117,20 +39,21 @@ class DashboardController extends Controller
         $budgetItems = $activeBudget ? $activeBudget->items : collect([]);
 
         return view('dashboard', [
-            'totalBalance' => $totalBalance,
-            'cashInThisMonth' => $cashInThisMonth,
-            'cashOutThisMonth' => $cashOutThisMonth,
-            'last7Days' => $last7Days,
-            'cashInData' => $cashInData,
-            'cashOutData' => $cashOutData,
-            'expenseLabels' => $expenseLabels,
-            'expenseData' => $expenseData,
-            'last30Days' => $last30Days,
-            'balanceTrend' => $balanceTrend,
+            'dashboard'          => $dashboard,
+            'totalBalance'       => $dashboard['net_worth']['current'],
+            'cashInThisMonth'    => $dashboard['cashflow']['income']['amount'],
+            'cashOutThisMonth'   => $dashboard['cashflow']['expense']['amount'],
+            'last7Days'          => $charts['cash_flow_7_days']['labels'],
+            'cashInData'         => $charts['cash_flow_7_days']['cash_in'],
+            'cashOutData'        => $charts['cash_flow_7_days']['cash_out'],
+            'expenseLabels'      => $spending->pluck('name')->all(),
+            'expenseData'        => $spending->pluck('amount')->all(),
+            'last30Days'         => $charts['daily_balance_30']['labels'],
+            'balanceTrend'       => $charts['daily_balance_30']['data'],
             'recentTransactions' => $recentTransactions,
-            'savings' => $savings,
-            'categories' => $categories,
-            'budgetItems' => $budgetItems,
+            'savings'            => $savings,
+            'categories'         => $categories,
+            'budgetItems'        => $budgetItems,
         ]);
     }
 }

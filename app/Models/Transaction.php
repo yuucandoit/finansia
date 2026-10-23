@@ -18,6 +18,8 @@ class Transaction extends Model
         'category_id',
         'budget_item_id',
         'type',
+        'direction',
+        'transfer_group_id',
         'description',
         'amount',
         'fee',
@@ -36,6 +38,54 @@ class Transaction extends Model
         'savings_id'       => 'integer',
         'user_id'          => 'integer',
     ];
+
+    public const DIRECTION_IN = 'in';
+    public const DIRECTION_OUT = 'out';
+
+    // Kelompok arus uang untuk laporan/dashboard
+    public const FLOW_INCOME = 'income';
+    public const FLOW_EXPENSE = 'expense';
+    public const FLOW_SAVINGS = 'savings';
+    public const FLOW_INTERNAL = 'internal_transfer';
+
+    protected static function booted(): void
+    {
+        static::creating(function (Transaction $tx) {
+            if (empty($tx->direction)) {
+                $tx->direction = $tx->type === 'Cash In' ? self::DIRECTION_IN : self::DIRECTION_OUT;
+            }
+        });
+    }
+
+    /**
+     * Perubahan saldo rekening akibat transaksi ini (sudah termasuk fee).
+     */
+    public function balanceEffect(): float
+    {
+        $amount = (float) $this->amount;
+        $fee = (float) ($this->fee ?? 0);
+
+        return $this->direction === self::DIRECTION_IN ? $amount : -($amount + $fee);
+    }
+
+    /**
+     * Klasifikasi arus uang:
+     * - Transfer/Tabungan yang berpasangan (antar rekening sendiri) -> internal, tidak dihitung pemasukan/pengeluaran.
+     * - Tabungan tanpa pasangan -> alokasi tabungan.
+     * - Uang masuk lainnya -> pemasukan; uang keluar lainnya -> pengeluaran.
+     */
+    public function flowGroup(): string
+    {
+        if ($this->transfer_group_id) {
+            return self::FLOW_INTERNAL;
+        }
+
+        if ($this->direction === self::DIRECTION_IN) {
+            return self::FLOW_INCOME;
+        }
+
+        return $this->type === 'Tabungan' ? self::FLOW_SAVINGS : self::FLOW_EXPENSE;
+    }
 
     public function category(): BelongsTo
     {

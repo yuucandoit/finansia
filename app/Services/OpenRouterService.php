@@ -155,6 +155,86 @@ PROMPT;
         return $this->fallbackFinancialAnswer($userMessage, $financialSnapshot);
     }
 
+    /**
+     * Parsing teks e-statement bank apapun menggunakan AI untuk menghasilkan array transaksi terstruktur.
+     */
+    public function parseBankStatementWithAi(string $statementText, array $categories = []): array
+    {
+        $currentYear = (int) now()->year;
+
+        $systemPrompt = <<<PROMPT
+Anda adalah AI Spesialis Ekstraksi Mutasi Bank & Rekening Koran untuk aplikasi Finansia.
+Tugas Anda: Membaca teks e-statement bank apapun dan mengekstrak SELURUH baris mutasi transaksi uang menjadi JSON array yang valid dan bersih.
+
+Format output JSON yang WAJIB dihasilkan:
+[
+  {
+    "date": "YYYY-MM-DD",
+    "raw_date": "Tanggal asli di dokumen (cth: 25 Sep 2026)",
+    "description": "Keterangan transaksi ringkas dan jelas (bersihkan nomor referensi panjang)",
+    "type": "Cash In" | "Cash Out",
+    "amount": nominal_angka_positif (integer atau float tanpa pemisah ribuan, contoh: 50000 atau 11758422),
+    "balance": saldo_setelah_transaksi (float atau null jika tidak ada)
+  }
+]
+
+Aturan Wajib:
+1. Kolom "type":
+   - "Cash In" untuk dana masuk (+), transfer masuk, setoran, bunga bank, gaji payroll, kredit (CR).
+   - "Cash Out" untuk dana keluar (-), pembayaran, transfer keluar, QRIS, tarik tunai, biaya admin, debet (DB).
+2. Kolom "amount": Harus angka murni positif (non-negatif).
+3. Kolom "date": Konversi tanggal mutasi ke format ISO "YYYY-MM-DD". Jika hanya ada tanggal dan bulan (DD/MM), gunakan tahun dari periode laporan di header (atau {$currentYear}).
+4. PENTING: Jangan masukkan saldo awal, saldo akhir, nomor rekening, atau informasi nasabah sebagai transaksi! Hanya baris mutasi riil.
+5. Balas HANYA dengan JSON array valid (dimulai dengan [ dan diakhiri dengan ]), TANPA backtick markdown (tanpa ```json), tanpa kalimat pengantar/penutup apapun.
+PROMPT;
+
+        if (empty($this->apiKey)) {
+            Log::warning('OpenRouter API key is empty, cannot parse bank statement with AI.');
+            return [];
+        }
+
+        $truncatedText = substr($statementText, 0, 18000);
+
+        Log::info('Memulai AI parsing untuk mutasi bank PDF', [
+            'length' => strlen($truncatedText),
+        ]);
+
+        $response = $this->callApi($this->primaryModel, $systemPrompt, $truncatedText);
+        if (!$response || isset($response['error'])) {
+            Log::warning('AI bank statement primary model failed, switching to fallback.');
+            $response = $this->callApi($this->fallbackModel, $systemPrompt, $truncatedText);
+        }
+
+        if ($response && !isset($response['error'])) {
+            $content = $response['choices'][0]['message']['content'] ?? '';
+            $items = $this->cleanAndParseJsonArray($content);
+            if (is_array($items) && count($items) > 0) {
+                Log::info('AI berhasil mengekstrak transaksi mutasi bank', ['count' => count($items)]);
+                return $items;
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Membersihkan output teks LLM dan mem-parsing JSON Array.
+     */
+    public function cleanAndParseJsonArray(string $rawContent): array
+    {
+        $clean = trim($rawContent);
+        $clean = preg_replace('/^```(?:json)?\s*/i', '', $clean);
+        $clean = preg_replace('/\s*```$/', '', $clean);
+        $clean = trim($clean);
+
+        if (preg_match('/(\[\s*\{.*\}\s*\])/s', $clean, $matches)) {
+            $clean = $matches[1];
+        }
+
+        $decoded = json_decode($clean, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
     protected function callApi(string $model, string $systemPrompt, string $userMessage): ?array
     {
         try {

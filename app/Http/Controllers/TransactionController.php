@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use App\Models\Saving;
 use App\Models\Transaction;
 use App\Models\Transaction_Item;
-use App\Models\Category;
+use App\Services\DuplicateTransactionHandler;
 use App\Services\PdfImportService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -153,6 +154,8 @@ class TransactionController extends Controller
                         throw new \Exception("Saldo rekening {$sourceSaving->name} tidak mencukupi (Sisa: Rp " . number_format($sourceSaving->current_balance, 0, ',', '.') . ", Dibutuhkan: Rp " . number_format($amount + $fee, 0, ',', '.') . ").");
                     }
 
+                    $transferGroupId = (string) \Illuminate\Support\Str::uuid();
+
                     // 1. Transaction Out on Source Account
                     Transaction::create([
                         'user_id'          => $userId,
@@ -160,6 +163,8 @@ class TransactionController extends Controller
                         'category_id'      => $categoryId,
                         'budget_item_id'   => $budgetItemId,
                         'type'             => $request->type,
+                        'direction'        => Transaction::DIRECTION_OUT,
+                        'transfer_group_id'=> $transferGroupId,
                         'description'      => $request->description . ' (ke ' . $destSaving->name . ')',
                         'amount'           => $amount,
                         'fee'              => $fee > 0 ? $fee : null,
@@ -175,6 +180,8 @@ class TransactionController extends Controller
                         'savings_id'       => $destSaving->id,
                         'category_id'      => $categoryId,
                         'type'             => $request->type,
+                        'direction'        => Transaction::DIRECTION_IN,
+                        'transfer_group_id'=> $transferGroupId,
                         'description'      => $request->description . ' (dari ' . $sourceSaving->name . ')',
                         'amount'           => $amount,
                         'fee'              => null,
@@ -315,7 +322,7 @@ class TransactionController extends Controller
     }
 
 
-    public function import(Request $request)
+    public function import(Request $request, DuplicateTransactionHandler $duplicateHandler)
     {
         \Log::info('Import started', [
             'has_file' => $request->hasFile('file'),
@@ -429,8 +436,9 @@ class TransactionController extends Controller
                     ->with('error', 'Gagal parsing data dari file');
             }
 
-            // Import transactions
+            // Import transactions dengan deteksi duplikat
             $importedCount = 0;
+            $skippedDuplicates = 0;
             \Log::info('Starting transaction import', ['total' => count($transactions)]);
             
             foreach ($transactions as $trans) {
@@ -448,6 +456,11 @@ class TransactionController extends Controller
                     $amount = $trans['amount_in'];
                 }
 
+                $amount = abs((float) $amount);
+                if ($amount <= 0) {
+                    continue;
+                }
+
                 // Parse date (format: "02 Jan 2026" to proper date)
                 $dateStr = $trans['date'] ?? date('d M Y');
                 try {
@@ -456,21 +469,40 @@ class TransactionController extends Controller
                     $transactionDate = now();
                 }
 
-                Transaction::updateOrCreate(
-                    [
-                        // 1. Array pertama: Kolom untuk "pencarian" (Uniqueness)
-                        'user_id' => auth()->id(),
-                        'savings_id' => $saving->id,
-                        'transaction_date' => $transactionDate,
-                        'amount' => $amount,
-                        'description' => $trans['description'] ?? 'Import dari e-statement',
-                    ],
-                    [
-                        // 2. Array kedua: Kolom yang mau di-update/set
-                        'type' => $type,
-                        'is_manual' => false,
-                    ]
+                $description = trim($trans['description'] ?? 'Import dari e-statement');
+
+                // Deteksi duplikasi berdasarkan nama transaksi dan jumlah pada bank yang sama
+                $existingTx = $duplicateHandler->findDuplicate(
+                    auth()->id(),
+                    $saving->id,
+                    $description,
+                    $amount,
+                    $transactionDate->format('Y-m-d')
                 );
+
+                if ($existingTx) {
+                    $skippedDuplicates++;
+                    \Log::info('Transaksi duplikat dilewati saat import Excel', [
+                        'user_id'     => auth()->id(),
+                        'savings_id'  => $saving->id,
+                        'description' => $description,
+                        'amount'      => $amount,
+                        'existing_id' => $existingTx->id,
+                    ]);
+                    continue;
+                }
+
+                Transaction::create([
+                    'user_id'          => auth()->id(),
+                    'savings_id'       => $saving->id,
+                    'transaction_date' => $transactionDate,
+                    'amount'           => $amount,
+                    'description'      => $description,
+                    'type'             => $type,
+                    'direction'        => $type === 'Cash In' ? Transaction::DIRECTION_IN : Transaction::DIRECTION_OUT,
+                    'is_manual'        => false,
+                ]);
+
                 if ($latestBalance !== null && ($isSameMonth && $isSameYear)) {
                     Saving::where('id', $saving->id)->update([
                         'current_balance' => $latestBalance
@@ -484,10 +516,18 @@ class TransactionController extends Controller
                 $importedCount++;
             }
 
-            \Log::info('Import completed successfully', ['imported' => $importedCount]);
+            \Log::info('Import completed successfully', [
+                'imported'   => $importedCount,
+                'duplicates' => $skippedDuplicates,
+            ]);
+
+            $successMsg = "Berhasil import {$importedCount} transaksi dari {$saving->bank->name}!";
+            if ($skippedDuplicates > 0) {
+                $successMsg .= " ({$skippedDuplicates} transaksi duplikat dilewati)";
+            }
 
             return redirect()->route('transaction.index')
-                ->with('success', "Berhasil import {$importedCount} transaksi dari {$saving->bank->name}!");
+                ->with('success', $successMsg);
 
         } catch (\Exception $e) {
             \Log::error('Import error:', ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
@@ -547,7 +587,7 @@ class TransactionController extends Controller
             'savings_id.required' => 'Pilih rekening tujuan.',
         ]);
 
-        $saving = Saving::where('id', $request->savings_id)
+        $saving = Saving::with('bank')->where('id', $request->savings_id)
             ->where('user_id', auth()->id())
             ->first();
 
@@ -558,13 +598,23 @@ class TransactionController extends Controller
             ], 403);
         }
 
+        $bankName = strtolower($saving->bank->name ?? '');
+        $bankCode = 'auto';
+        if (str_contains($bankName, 'jago')) {
+            $bankCode = 'jago';
+        } elseif (str_contains($bankName, 'bca')) {
+            $bankCode = 'bca';
+        } elseif (str_contains($bankName, 'mandiri')) {
+            $bankCode = 'mandiri';
+        }
+
         $file = $request->file('file');
         $tempFileName = 'import_' . auth()->id() . '_' . time() . '_' . uniqid() . '.pdf';
         $tempPath = $file->storeAs('temp', $tempFileName, 'public');
         $fullPath = storage_path('app/public/' . $tempPath);
 
         try {
-            $extractedData = $importService->extract($fullPath, $request->password, auth()->id());
+            $extractedData = $importService->extract($fullPath, $bankCode, $request->password, auth()->id(), (int) $saving->id);
 
             return response()->json([
                 'status'  => 'success',
@@ -620,13 +670,20 @@ class TransactionController extends Controller
                 (int) $request->savings_id,
                 $request->transactions,
                 (bool) $request->input('update_balance', false),
-                $request->filled('final_balance') ? (float) $request->final_balance : null
+                $request->filled('final_balance') ? (float) $request->final_balance : null,
+                (bool) $request->input('skip_duplicates', false)
             );
 
+            $message = "Berhasil menyimpan {$result['count']} transaksi ke rekening {$result['saving_name']}!";
+            if (!empty($result['duplicates_skipped']) && $result['duplicates_skipped'] > 0) {
+                $message .= " ({$result['duplicates_skipped']} transaksi duplikat dilewati)";
+            }
+
             return response()->json([
-                'status'  => 'success',
-                'message' => "Berhasil menyimpan {$result['count']} transaksi ke rekening {$result['saving_name']}!",
-                'count'   => $result['count'],
+                'status'             => 'success',
+                'message'            => $message,
+                'count'              => $result['count'],
+                'duplicates_skipped' => $result['duplicates_skipped'] ?? 0,
             ]);
         } catch (\Exception $e) {
             \Log::error('PDF Import save error: ' . $e->getMessage(), [

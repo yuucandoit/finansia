@@ -17,10 +17,17 @@ use RuntimeException;
 class PdfImportService
 {
     protected BudgetService $budgetService;
+    protected OpenRouterService $openRouterService;
+    protected DuplicateTransactionHandler $duplicateHandler;
 
-    public function __construct(BudgetService $budgetService)
-    {
+    public function __construct(
+        BudgetService $budgetService,
+        OpenRouterService $openRouterService,
+        ?DuplicateTransactionHandler $duplicateHandler = null
+    ) {
         $this->budgetService = $budgetService;
+        $this->openRouterService = $openRouterService;
+        $this->duplicateHandler = $duplicateHandler ?? app(DuplicateTransactionHandler::class);
     }
 
     /**
@@ -29,32 +36,48 @@ class PdfImportService
     public function getPythonBinary(): string
     {
         $configured = config('services.python_path') ?: env('PYTHON_PATH');
-        if ($configured && file_exists($configured)) {
+        if ($configured && (file_exists($configured) || is_executable($configured))) {
             return $configured;
         }
 
         $venvPython = base_path('decoder/.venv/bin/python3');
-        if (file_exists($venvPython)) {
+        if (file_exists($venvPython) && is_executable($venvPython)) {
             return $venvPython;
         }
 
         $venvPythonAlt = base_path('decoder/.venv/bin/python');
-        if (file_exists($venvPythonAlt)) {
+        if (file_exists($venvPythonAlt) && is_executable($venvPythonAlt)) {
             return $venvPythonAlt;
+        }
+
+        $candidates = [
+            '/opt/homebrew/bin/python3.12',
+            '/opt/homebrew/bin/python3',
+            '/usr/local/bin/python3',
+            '/usr/bin/python3',
+            'python3'
+        ];
+
+        foreach ($candidates as $cand) {
+            if ($cand === 'python3' || (file_exists($cand) && is_executable($cand))) {
+                return $cand;
+            }
         }
 
         return 'python3';
     }
 
     /**
-     * Ekstrak tabel transaksi dari file PDF menggunakan script Python.
+     * Ekstrak tabel transaksi dari file PDF menggunakan script Python multi-bank.
      *
      * @param string $pdfFilePath Path absolut ke file PDF
+     * @param string|null $bankCodeOrPassword Kode bank (jago/bca/mandiri) atau password jika legacy
      * @param string|null $password Password PDF jika terenkripsi
      * @param int|null $userId ID User untuk auto-assign kategori & budget item
+     * @param int|null $savingsId ID Rekening untuk deteksi duplikat transaksi
      * @return array
      */
-    public function extract(string $pdfFilePath, ?string $password = null, ?int $userId = null): array
+    public function extract(string $pdfFilePath, ?string $bankCodeOrPassword = 'auto', ?string $password = null, ?int $userId = null, ?int $savingsId = null): array
     {
         if (!file_exists($pdfFilePath)) {
             throw new InvalidArgumentException("File PDF tidak ditemukan pada path: {$pdfFilePath}");
@@ -67,13 +90,31 @@ class PdfImportService
             throw new RuntimeException("Script ekstraktor PDF tidak ditemukan di: {$scriptPath}");
         }
 
-        $escapedPdf = escapeshellarg($pdfFilePath);
-        $escapedPassword = $password ? escapeshellarg($password) : '';
-        $command = "{$pythonBin} " . escapeshellarg($scriptPath) . " {$escapedPdf} {$escapedPassword} 2>&1";
+        // Tangani parameter fleksibel untuk backward compatibility
+        $knownBankCodes = ['jago', 'bca', 'mandiri', 'bri', 'bni', 'cimb', 'seabank', 'auto', '014', '008', '213', '002', '009'];
+        $bankCode = 'auto';
+        $actualPassword = $password;
 
-        Log::info('Menjalankan ekstraktor PDF', [
+        if ($bankCodeOrPassword && in_array(strtolower($bankCodeOrPassword), $knownBankCodes)) {
+            $bankCode = strtolower($bankCodeOrPassword);
+        } elseif ($bankCodeOrPassword && $password === null) {
+            // Pemanggilan legacy: extract($path, $password, $userId)
+            $actualPassword = $bankCodeOrPassword;
+            $bankCode = 'auto';
+        }
+
+        $escapedPdf = escapeshellarg($pdfFilePath);
+        $escapedBank = escapeshellarg($bankCode);
+        $escapedPassword = $actualPassword ? escapeshellarg($actualPassword) : '';
+
+        $sitePackages = base_path('decoder/.venv/lib/python3.12/site-packages');
+        $pythonEnv = file_exists($sitePackages) ? 'PYTHONPATH=' . escapeshellarg($sitePackages) . ' ' : '';
+        $command = "{$pythonEnv}{$pythonBin} " . escapeshellarg($scriptPath) . " {$escapedPdf} {$escapedBank} {$escapedPassword} 2>&1";
+
+        Log::info('Menjalankan ekstraktor PDF multi-bank', [
             'command' => $command,
-            'has_password' => !empty($password),
+            'bank_code' => $bankCode,
+            'has_password' => !empty($actualPassword),
         ]);
 
         $output = [];
@@ -88,11 +129,13 @@ class PdfImportService
                 'output' => $outputText,
             ]);
 
-            if (str_contains(strtolower($outputText), 'password salah') || str_contains(strtolower($outputText), 'terproteksi password')) {
+            if (str_contains(strtolower($outputText), 'password salah') || str_contains(strtolower($outputText), 'terproteksi password') || str_contains(strtolower($outputText), 'membutuhkan password')) {
                 throw new InvalidArgumentException('Password PDF salah atau dokumen terproteksi password.');
             }
 
-            throw new RuntimeException("Gagal mengekstrak file PDF: " . substr($outputText, 0, 300));
+            if (!str_contains($outputText, '===JSON_START===')) {
+                throw new RuntimeException("Gagal mengekstrak file PDF: " . substr($outputText, 0, 300));
+            }
         }
 
         // Cari JSON di antara marker ===JSON_START=== dan ===JSON_END===
@@ -100,30 +143,76 @@ class PdfImportService
         if (preg_match('/===JSON_START===\s*(.*?)\s*===JSON_END===/s', $outputText, $matches)) {
             $jsonString = trim($matches[1]);
         } else {
-            // Fallback: cari blok JSON array pertama
-            if (preg_match('/(\[\s*\{.*\}\s*\])/s', $outputText, $matches)) {
+            // Fallback: cari blok JSON array atau object pertama
+            if (preg_match('/(\[\s*\{.*\}\s*\]|\{\s*".*"\s*:.*?\})/s', $outputText, $matches)) {
                 $jsonString = trim($matches[1]);
             }
         }
 
-        if (empty($jsonString)) {
-            Log::error('Tidak ditemukan output JSON dari PDF extractor', ['output' => $outputText]);
+        $payload = !empty($jsonString) ? json_decode($jsonString, true) : null;
+        $rawRows = [];
+        $rawText = '';
+        $parserName = 'Local Parser';
+        $isAiParsed = false;
+
+        if (is_array($payload)) {
+            if (isset($payload['transactions']) && is_array($payload['transactions'])) {
+                $rawRows = $payload['transactions'];
+                $rawText = $payload['raw_text'] ?? '';
+                $parserName = $payload['parser'] ?? 'Local Parser';
+            } else {
+                // Format flat array legacy
+                $rawRows = $payload;
+            }
+        }
+
+        // EVALUASI: Sesuai atau Tidak?
+        // Sesuai jika terdapat minimal 1 transaksi valid hasil parser lokal
+        $isSuitable = !empty($rawRows) && is_array($rawRows) && count($rawRows) > 0;
+
+        if (!$isSuitable) {
+            Log::info('Hasil parsing lokal PDF kosong atau tidak sesuai. Mencoba AI fallback...', [
+                'bank_code' => $bankCode,
+                'parser' => $parserName,
+                'has_raw_text' => !empty($rawText),
+            ]);
+
+            if (empty($rawText)) {
+                $rawText = $outputText;
+            }
+
+            if (!empty($rawText)) {
+                try {
+                    $aiRows = $this->openRouterService->parseBankStatementWithAi($rawText);
+                    if (!empty($aiRows) && is_array($aiRows) && count($aiRows) > 0) {
+                        $rawRows = $aiRows;
+                        $isAiParsed = true;
+                        $parserName = 'AI Assistant (OpenRouter)';
+                        Log::info('Berhasil mengekstrak transaksi via AI fallback', ['count' => count($rawRows)]);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('AI bank statement parsing failed: ' . $e->getMessage());
+                }
+            }
+        }
+
+        if (empty($rawRows)) {
+            Log::error('Tidak ditemukan transaksi dari PDF extractor maupun AI fallback', ['output' => substr($outputText, 0, 500)]);
             throw new RuntimeException('Tidak ada data transaksi yang dapat dibaca dari file PDF ini.');
         }
 
-        $rawRows = json_decode($jsonString, true);
-        if (!is_array($rawRows)) {
-            Log::error('Gagal mendekode JSON dari PDF extractor', ['json' => $jsonString]);
-            throw new RuntimeException('Gagal memproses struktur JSON hasil ekstraksi PDF.');
-        }
+        $result = $this->normalizeExtractedRows($rawRows, $userId, $savingsId);
+        $result['is_ai_parsed'] = $isAiParsed;
+        $result['parser_name'] = $parserName;
 
-        return $this->normalizeExtractedRows($rawRows, $userId);
+        return $result;
     }
+
 
     /**
      * Normalisasi baris transaksi dari berbagai format tabel e-statement.
      */
-    public function normalizeExtractedRows(array $rawRows, ?int $userId = null): array
+    public function normalizeExtractedRows(array $rawRows, ?int $userId = null, ?int $savingsId = null): array
     {
         $items = [];
         $totalCashIn = 0;
@@ -144,44 +233,53 @@ class PdfImportService
         }
 
         foreach ($rawRows as $index => $row) {
-            // 1. Ekstrak Tanggal
-            $dateRaw = $row['Date & Time'] ?? $row['Date'] ?? $row['Tanggal & Jam'] ?? $row['Tanggal'] ?? $row['Waktu'] ?? '';
+            // 1. Ekstrak Tanggal (Mendukung standar 'date' atau format mentah tabel)
+            $dateRaw = $row['date'] ?? $row['raw_date'] ?? $row['Date & Time'] ?? $row['Date'] ?? $row['Tanggal & Jam'] ?? $row['Tanggal'] ?? $row['Waktu'] ?? '';
             $parsedDate = $this->parseIndonesianDate($dateRaw);
 
             // 2. Ekstrak Keterangan / Deskripsi
-            $descParts = [];
-            if (!empty($row['Source/Destination'])) {
-                $descParts[] = trim($row['Source/Destination']);
+            if (!empty($row['description'])) {
+                $description = trim($row['description']);
+            } else {
+                $descParts = [];
+                if (!empty($row['Source/Destination'])) {
+                    $descParts[] = trim($row['Source/Destination']);
+                }
+                if (!empty($row['Transaction Details'])) {
+                    $descParts[] = trim($row['Transaction Details']);
+                }
+                if (!empty($row['Notes'])) {
+                    $descParts[] = trim($row['Notes']);
+                }
+                if (empty($descParts)) {
+                    $descParts[] = $row['Keterangan'] ?? $row['Deskripsi'] ?? $row['Uraian'] ?? 'Transaksi Bank';
+                }
+                $description = implode(' - ', array_filter($descParts));
             }
-            if (!empty($row['Transaction Details'])) {
-                $descParts[] = trim($row['Transaction Details']);
-            }
-            if (!empty($row['Notes'])) {
-                $descParts[] = trim($row['Notes']);
-            }
-            if (empty($descParts)) {
-                $descParts[] = $row['Keterangan'] ?? $row['Deskripsi'] ?? $row['Uraian'] ?? 'Transaksi Bank';
-            }
-            $description = implode(' - ', array_filter($descParts));
             $description = preg_replace('/\s+/', ' ', $description);
 
             // 3. Ekstrak Nominal & Tipe
-            $amountRaw = $row['Amount'] ?? $row['Jumlah'] ?? $row['Nominal'] ?? '';
-            $type = 'Cash Out';
+            if (isset($row['amount']) && is_numeric($row['amount']) && isset($row['type'])) {
+                $type = in_array($row['type'], ['Cash In', 'Cash Out', 'Transfer', 'Tabungan']) ? $row['type'] : 'Cash Out';
+                $amount = abs((float) $row['amount']);
+            } else {
+                $amountRaw = $row['Amount'] ?? $row['Jumlah'] ?? $row['Nominal'] ?? '';
+                $type = 'Cash Out';
 
-            if (str_starts_with(trim($amountRaw), '+')) {
-                $type = 'Cash In';
-            } elseif (str_starts_with(trim($amountRaw), '-')) {
-                $type = 'Cash Out';
-            } elseif (!empty($row['Dana Masuk']) && $this->parseIndonesianAmount($row['Dana Masuk']) > 0) {
-                $type = 'Cash In';
-                $amountRaw = $row['Dana Masuk'];
-            } elseif (!empty($row['Dana Keluar']) && $this->parseIndonesianAmount($row['Dana Keluar']) > 0) {
-                $type = 'Cash Out';
-                $amountRaw = $row['Dana Keluar'];
+                if (str_starts_with(trim($amountRaw), '+')) {
+                    $type = 'Cash In';
+                } elseif (str_starts_with(trim($amountRaw), '-')) {
+                    $type = 'Cash Out';
+                } elseif (!empty($row['Dana Masuk']) && $this->parseIndonesianAmount($row['Dana Masuk']) > 0) {
+                    $type = 'Cash In';
+                    $amountRaw = $row['Dana Masuk'];
+                } elseif (!empty($row['Dana Keluar']) && $this->parseIndonesianAmount($row['Dana Keluar']) > 0) {
+                    $type = 'Cash Out';
+                    $amountRaw = $row['Dana Keluar'];
+                }
+
+                $amount = $this->parseIndonesianAmount($amountRaw);
             }
-
-            $amount = $this->parseIndonesianAmount($amountRaw);
 
             if ($amount <= 0) {
                 // Abaikan baris tanpa pergerakan uang
@@ -189,8 +287,12 @@ class PdfImportService
             }
 
             // 4. Ekstrak Saldo (Balance)
-            $balanceRaw = $row['Balance'] ?? $row['Saldo'] ?? '';
-            $balance = !empty($balanceRaw) ? $this->parseIndonesianAmount($balanceRaw) : null;
+            if (isset($row['balance']) && is_numeric($row['balance'])) {
+                $balance = (float) $row['balance'];
+            } else {
+                $balanceRaw = $row['Balance'] ?? $row['Saldo'] ?? '';
+                $balance = !empty($balanceRaw) ? $this->parseIndonesianAmount($balanceRaw) : null;
+            }
             if ($balance !== null) {
                 $finalBalance = $balance;
             }
@@ -242,8 +344,21 @@ class PdfImportService
             ];
         }
 
+        $duplicateCount = 0;
+        $newCount = count($items);
+
+        if ($userId && $savingsId) {
+            $batchResult = $this->duplicateHandler->detectBatch($userId, $savingsId, $items);
+            $items = $batchResult['transactions'];
+            $duplicateCount = $batchResult['duplicate_count'];
+            $newCount = $batchResult['new_count'];
+        }
+
         return [
             'total_items'       => count($items),
+            'duplicate_count'   => $duplicateCount,
+            'new_count'         => $newCount,
+            'has_duplicates'    => $duplicateCount > 0,
             'total_cash_in'     => $totalCashIn,
             'total_cash_in_fmt' => 'Rp ' . number_format($totalCashIn, 0, ',', '.'),
             'total_cash_out'    => $totalCashOut,
@@ -307,6 +422,17 @@ class PdfImportService
         $clean = strip_tags($rawDate);
         $clean = preg_replace('/\s+/', ' ', trim($clean));
 
+        // Format DD/MM/YYYY atau DD/MM/YY
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/', $clean, $m)) {
+            $year = strlen($m[3]) === 2 ? (int) ('20' . $m[3]) : (int) $m[3];
+            return Carbon::createFromDate($year, (int) $m[2], (int) $m[1])->startOfDay();
+        }
+
+        // Format YYYY-MM-DD
+        if (preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})/', $clean, $m)) {
+            return Carbon::createFromDate((int) $m[1], (int) $m[2], (int) $m[3])->startOfDay();
+        }
+
         // Terjemahkan nama bulan Indonesia ke Inggris untuk Carbon
         $monthTranslations = [
             'jan' => 'Jan', 'feb' => 'Feb', 'mar' => 'Mar', 'apr' => 'Apr',
@@ -333,16 +459,23 @@ class PdfImportService
     /**
      * Simpan kumpulan transaksi yang telah dimodifikasi pengguna ke database.
      */
-    public function saveImported(User $user, int $savingsId, array $transactions, bool $updateBalance = false, ?float $finalBalance = null): array
-    {
+    public function saveImported(
+        User $user,
+        int $savingsId,
+        array $transactions,
+        bool $updateBalance = false,
+        ?float $finalBalance = null,
+        bool $skipDuplicates = false
+    ): array {
         $saving = Saving::where('id', $savingsId)
             ->where('user_id', $user->id)
             ->firstOrFail();
 
         $savedCount = 0;
+        $duplicatesSkipped = 0;
         $totalAmount = 0.0;
 
-        DB::transaction(function () use ($user, $saving, $transactions, $updateBalance, $finalBalance, &$savedCount, &$totalAmount) {
+        DB::transaction(function () use ($user, $saving, $transactions, $updateBalance, $finalBalance, $skipDuplicates, &$savedCount, &$duplicatesSkipped, &$totalAmount) {
             foreach ($transactions as $trans) {
                 // Abaikan jika tidak dipilih (unselected)
                 if (isset($trans['is_selected']) && !$trans['is_selected']) {
@@ -363,6 +496,22 @@ class PdfImportService
                     ? Carbon::parse($trans['transaction_date'])->format('Y-m-d')
                     : now()->format('Y-m-d');
 
+                // Jika proteksi duplikat diaktifkan, lewati transaksi yang sudah ada
+                if ($skipDuplicates) {
+                    $existing = $this->duplicateHandler->findDuplicate(
+                        $user->id,
+                        $saving->id,
+                        $description,
+                        $amount,
+                        $transactionDate
+                    );
+
+                    if ($existing) {
+                        $duplicatesSkipped++;
+                        continue;
+                    }
+                }
+
                 $categoryId = !empty($trans['category_id']) ? (int) $trans['category_id'] : null;
                 $budgetItemId = !empty($trans['budget_item_id']) ? (int) $trans['budget_item_id'] : null;
 
@@ -382,6 +531,8 @@ class PdfImportService
                     }
                 }
 
+                $direction = ($type === 'Cash In') ? Transaction::DIRECTION_IN : Transaction::DIRECTION_OUT;
+
                 Transaction::updateOrCreate(
                     [
                         'user_id'          => $user->id,
@@ -392,6 +543,7 @@ class PdfImportService
                     ],
                     [
                         'type'           => $type,
+                        'direction'      => $direction,
                         'category_id'    => $categoryId,
                         'budget_item_id' => $budgetItemId,
                         'fee'            => 0,
@@ -417,10 +569,11 @@ class PdfImportService
         });
 
         return [
-            'count'         => $savedCount,
-            'total_amount'  => $totalAmount,
-            'final_balance' => $finalBalance,
-            'saving_name'   => $saving->name,
+            'count'               => $savedCount,
+            'duplicates_skipped'  => $duplicatesSkipped,
+            'total_amount'        => $totalAmount,
+            'final_balance'       => $finalBalance,
+            'saving_name'         => $saving->name,
         ];
     }
 }

@@ -184,6 +184,8 @@ class TransactionController extends Controller
                         );
                     }
 
+                    $transferGroupId = (string) \Illuminate\Support\Str::uuid();
+
                     // 1. Catat transaksi keluar di rekening asal
                     $txOut = Transaction::create([
                         'user_id'          => $userId,
@@ -191,6 +193,8 @@ class TransactionController extends Controller
                         'category_id'      => $categoryId,
                         'budget_item_id'   => $budgetItemId,
                         'type'             => $validated['type'],
+                        'direction'        => Transaction::DIRECTION_OUT,
+                        'transfer_group_id'=> $transferGroupId,
                         'description'      => $validated['description'] . ' (ke ' . $destSaving->name . ')',
                         'amount'           => $amount,
                         'fee'              => $fee > 0 ? $fee : null,
@@ -206,6 +210,8 @@ class TransactionController extends Controller
                         'savings_id'       => $destSaving->id,
                         'category_id'      => $categoryId,
                         'type'             => $validated['type'],
+                        'direction'        => Transaction::DIRECTION_IN,
+                        'transfer_group_id'=> $transferGroupId,
                         'description'      => $validated['description'] . ' (dari ' . $sourceSaving->name . ')',
                         'amount'           => $amount,
                         'fee'              => null,
@@ -314,22 +320,21 @@ class TransactionController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($tx) {
-                $saving = Saving::find($tx->savings_id);
-                $amount = (float) $tx->amount;
-                $fee = (float) ($tx->fee ?? 0);
+            DB::transaction(function () use ($tx, $userId) {
+                // Transfer antar rekening: hapus kedua sisi sekaligus agar saldo tetap konsisten
+                $legs = $tx->transfer_group_id
+                    ? Transaction::where('user_id', $userId)->where('transfer_group_id', $tx->transfer_group_id)->get()
+                    : collect([$tx]);
 
-                if ($saving) {
-                    if ($tx->type === 'Cash In') {
-                        // Rollback Cash In: kurangi saldo
-                        $saving->decrement('current_balance', $amount);
-                    } else {
-                        // Rollback Cash Out / Tabungan / Transfer: kembalikan saldo
-                        $saving->increment('current_balance', $amount + $fee);
+                foreach ($legs as $leg) {
+                    $saving = Saving::find($leg->savings_id);
+                    if ($saving) {
+                        // Kebalikan dari efek transaksi terhadap saldo (termasuk fee)
+                        $saving->decrement('current_balance', $leg->balanceEffect());
                     }
-                }
 
-                $tx->delete();
+                    $leg->delete();
+                }
             });
 
             return $this->successResponse(null, 'Transaksi berhasil dihapus dan saldo telah disesuaikan kembali.');
@@ -374,12 +379,22 @@ class TransactionController extends Controller
         }
 
         $userId = $request->user()->id;
-        $saving = Saving::where('id', $request->savings_id)
+        $saving = Saving::with('bank')->where('id', $request->savings_id)
             ->where('user_id', $userId)
             ->first();
 
         if (!$saving) {
             return $this->errorResponse('Rekening bank tidak ditemukan atau bukan milik Anda.', 403);
+        }
+
+        $bankName = strtolower($saving->bank->name ?? '');
+        $bankCode = 'auto';
+        if (str_contains($bankName, 'jago')) {
+            $bankCode = 'jago';
+        } elseif (str_contains($bankName, 'bca')) {
+            $bankCode = 'bca';
+        } elseif (str_contains($bankName, 'mandiri')) {
+            $bankCode = 'mandiri';
         }
 
         $file = $request->file('file');
@@ -388,7 +403,7 @@ class TransactionController extends Controller
         $fullPath = storage_path('app/public/' . $tempPath);
 
         try {
-            $extractedData = $importService->extract($fullPath, $request->password, $userId);
+            $extractedData = $importService->extract($fullPath, $bankCode, $request->password, $userId, (int) $saving->id);
 
             return $this->successResponse($extractedData, 'Berhasil mengekstrak transaksi dari PDF.');
         } catch (\InvalidArgumentException $e) {
@@ -435,13 +450,15 @@ class TransactionController extends Controller
                 (int) $request->savings_id,
                 $request->transactions,
                 (bool) $request->input('update_balance', false),
-                $request->filled('final_balance') ? (float) $request->final_balance : null
+                $request->filled('final_balance') ? (float) $request->final_balance : null,
+                (bool) $request->input('skip_duplicates', false)
             );
 
             return $this->successResponse([
-                'count'        => $result['count'],
-                'total_amount' => $result['total_amount'],
-                'saving_name'  => $result['saving_name'],
+                'count'              => $result['count'],
+                'duplicates_skipped' => $result['duplicates_skipped'] ?? 0,
+                'total_amount'       => $result['total_amount'],
+                'saving_name'        => $result['saving_name'],
             ], "Berhasil menyimpan {$result['count']} transaksi ke rekening {$result['saving_name']}!");
         } catch (\Exception $e) {
             \Log::error('API PDF Import save error: ' . $e->getMessage());
