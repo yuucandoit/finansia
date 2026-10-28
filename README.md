@@ -24,6 +24,14 @@
 ## 📌 Daftar Isi
 - [Tentang Finansia](#-tentang-finansia)
 - [Fitur Utama](#-fitur-utama)
+  - [1. Asisten Keuangan AI](#1--asisten-keuangan-ai-interactive-ai-chatbot)
+  - [2. Dashboard Finansia Interaktif](#2--dashboard-finansia-interaktif)
+  - [3. Manajemen Tabungan & Multi-Rekening](#3--manajemen-tabungan--multi-rekening-saving)
+  - [4. Pencatatan & Manajemen Transaksi](#4--pencatatan--manajemen-transaksi)
+  - [5. Smart E-Statement Decoder & Deteksi Duplikasi](#5--smart-e-statement-decoder--anti-duplicate-transaction-handler)
+  - [6. Future Planner & Hierarchical Task Items](#6--future-planner-rencana-masa-depan--spreadsheet-outline-task-tree)
+  - [7. Perencanaan Anggaran Bulanan (Budgeting)](#7--perencanaan-anggaran-bulanan-budgeting)
+  - [8. Autentikasi & Keamanan Pengguna](#8--autentikasi--keamanan-pengguna)
 - [Teknologi yang Digunakan](#-teknologi-yang-digunakan)
 - [Prasyarat Sistem](#-prasyarat-sistem)
 - [Panduan Instalasi](#-panduan-instalasi)
@@ -87,19 +95,52 @@
 * **Pindah Dana (Transfer)**: Otomatis memotong saldo rekening asal dan menambah rekening tujuan secara bersamaan dalam satu transaksi database atomik (`DB::transaction`).
 * **Penyaringan & Pencarian**: Tab filter cepat (*Semua*, *Pemasukan*, *Pengeluaran*, *Tabungan*), pencarian teks/nominal, serta paginasi 15 transaksi per halaman.
 
-### 5. 📥 Smart E-Statement Decoder (Import Mutasi Bank Excel)
-* Unggah mutasi elektronik resmi berformat `.xlsx` atau `.xls`.
-* **Dukungan Password E-Statement**: Mampu mendekripsi file Excel e-statement bank yang terproteksi sandi secara otomatis.
-* **Multi-Bank Parser (Python Engine)**:
+### 5. 📥 Smart E-Statement Decoder & Anti-Duplicate Transaction Handler
+* **Dukungan Format Excel & PDF**: Mampu mengimpor mutasi rekening elektronik resmi berformat `.xlsx`, `.xls`, dan `.pdf`.
+* **Dukungan Password E-Statement**: Mendekripsi file e-statement bank yang terproteksi sandi secara otomatis.
+* **Multi-Bank Parser**:
   * Bank Mandiri (Livin')
   * Bank BRI (BRImo)
   * Bank BCA
-* **Anti Duplikasi & Auto-Sync**: Mencegah data tercatat ganda (*updateOrCreate*) dan otomatis menyinkronkan saldo akhir tabungan sesuai saldo mutasi terkini.
+  * Bank Jago & E-Wallet
+* **Engine Deteksi Transaksi Duplikat Cerdas (`DuplicateTransactionHandler`)**:
+  * Otomatis memindai kecocokan nama/deskripsi transaksi, nominal, tanggal, dan rekening bank yang sama pada data mutasi yang diimpor.
+  * Menampilkan banner peringatan duplikasi, visual highlight amber, badge `⚠️ Duplikat`, dan filter tab khusus `⚠️ Duplikat`.
+  * Tombol instan **`[Pilih Hanya Transaksi Baru]`** untuk membatalkan pilihan (*uncheck*) seluruh transaksi yang sudah pernah tercatat di database, mencegah risiko *double counting* saldo tabungan.
 
-### 6. 🔐 Autentikasi & Keamanan Pengguna
+### 6. 🎯 Future Planner (Rencana Masa Depan & Spreadsheet Outline Task Tree)
+* **Master Future Plan**: Buat rencana finansial atau proyek masa depan (misal: *"Setup Ruang Kerja 2027"*, *"Liburan ke Jepang"*, *"Renovasi Rumah"*), lengkap dengan deskripsi, target tanggal selesai, status, dan label warna.
+* **Breakdown Item Bertingkat (Parent-Child WBS Tree)**:
+  * Struktur tugas dan kebutuhan bercabang bertingkat tanpa batas (Level 1, Level 2, Level 3).
+  * Dilengkapi konektor visual pohon (`└──`, `│ └──`), badge level, dan tombol lipat/buka cabang (*expand/collapse*).
+* **Input Baris Langsung (Inline Row Entry)**:
+  * Menambahkan item kebutuhan langsung pada baris tabel layaknya di **Notion** atau **Excel**—tanpa perlu membuka pop-up modal formulir terpisah.
+  * Cukup ketik nama item, kuantitas (Qty), harga satuan, dan tekan **Enter** pada keyboard untuk menyimpan seketika.
+* **Rollup Biaya Otomatis**:
+  * Subtotal pada baris item induk (*parent*) secara otomatis merupakan akumulasi SUM dari seluruh sub-cabang di bawahnya (*effective subtotal*).
+* **Navigasi Cabang 1-Klik**:
+  * Tombol **`+ Sub`**: Membuka baris input anak tepat di bawah item induk yang dipilih.
+  * Tombol **`↳ Sub` (Indent)**: 1-klik mengubah item menjadi sub-cabang dari baris di atasnya.
+  * Tombol **`↰ Utama` (Outdent)**: 1-klik menaikkan tingkat cabang kembali ke level utama (*root*).
+  * Tombol **`✎ Edit`**: Mengubah baris tabel menjadi mode input sel langsung untuk revisi cepat.
+* **Checklist Pembelian Real-Time (AJAX)**:
+  * Centang kotak (*checkbox*) pada item yang telah terbeli: teks otomatis diberi efek coret (*strike-through*) dan metrik realisasi terbarui tanpa *reload* halaman.
+* **Baris Total Keseluruhan (Sticky Grand Total)**:
+  * Menampilkan akumulasi total biaya keseluruhan rencana, total unit barang (Qty), perbandingan dana yang sudah terbeli vs sisa kebutuhan dana, serta persentase progres pemenuhan.
+* **Mode Tampilan Widescreen (Full Width)**:
+  * Tampilan default membentang penuh di seluruh layar monitor widescreen untuk pengalaman spreadsheet yang lapang, dilengkapi tombol toggle *Mode Full Width / Mode Boxed*.
+* **REST API Lengkap**: Terintegrasi endpoint `/api/v1/future-planner` yang siap dihubungkan ke aplikasi mobile (Flutter / Kotlin Multiplatform).
+
+### 7. 📊 Perencanaan Anggaran Bulanan (Budgeting)
+* **Alokasi Pos Anggaran**: Tentukan batas pengeluaran per pos atau kategori bulanan (kebutuhan primer, hiburan, investasi, dll.).
+* **Integrasi AI Multi-Budget Parsing**: Mampu mengenali daftar anggaran sekaligus dari teks percakapan biasa dan menyimpannya secara otomatis.
+* **Monitoring Realisasi Anggaran**: Tampilan progress bar interaktif dengan indikator visual jika alokasi pengeluaran mendekati atau melampaui batas (*overbudget*).
+
+### 8. 🔐 Autentikasi & Keamanan Pengguna
 * Sistem autentikasi lengkap dengan Laravel Breeze (Login, Register, Logout, Reset Password).
 * Manajemen Profil pengguna (ubah nama, email, dan hapus akun).
-* **Multi-Tenant Data Isolation**: Seluruh data rekening dan transaksi terisolasi secara ketat berdasarkan `user_id` milik pengguna yang sedang login.
+* **Multi-Tenant Data Isolation**: Seluruh data rekening, mutasi, anggaran, dan future plan terisolasi secara ketat berdasarkan `user_id` milik pengguna yang sedang login.
+* **Role Master Mind / Admin**: Fitur persetujuan pengguna baru (*User Approvals*) khusus administrator terotorisasi.
 
 ---
 
@@ -225,19 +266,29 @@ Buka peramban Anda di `http://127.0.0.1:8000`.
 finansia/
 ├── app/
 │   ├── Http/Controllers/
-│   │   ├── AiChatController.php          # Controller router AI (Q&A & Transaksi)
+│   │   ├── AiChatController.php          # Controller router AI (Q&A, parsing anggaran, transaksi)
+│   │   ├── BudgetController.php          # Controller pos anggaran bulanan
 │   │   ├── DashboardController.php       # Controller ringkasan & chart dashboard
+│   │   ├── FuturePlanController.php      # Controller Future Planner & inline row items
 │   │   ├── SavingController.php          # Controller CRUD & detail tabungan
-│   │   └── TransactionController.php     # Controller transaksi & import statement
+│   │   ├── TransactionController.php     # Controller transaksi & import statement
+│   │   └── Api/
+│   │       ├── ...
+│   │       └── FuturePlanController.php  # REST API Future Planner untuk aplikasi mobile
 │   ├── Models/
 │   │   ├── Bank.php                      # Model master data bank
+│   │   ├── Budget.php                    # Model pos anggaran pengeluaran
 │   │   ├── Category.php                  # Model kategori transaksi
+│   │   ├── FuturePlan.php                # Model master rencana masa depan
+│   │   ├── FuturePlanItem.php            # Model item bertingkat (parent-child WBS tree)
 │   │   ├── Saving.php                    # Model rekening tabungan
 │   │   ├── Transaction.php               # Model mutasi transaksi keuangan
 │   │   └── User.php                      # Model pengguna aplikasi
 │   └── Services/
+│       ├── DuplicateTransactionHandler.php # Engine pendeteksi transaksi duplikat import
 │       ├── FinancialContextService.php   # Service snapshot keuangan untuk AI
-│       └── OpenRouterService.php         # Service OpenRouter LLM + Fallback NLP
+│       ├── OpenRouterService.php         # Service OpenRouter LLM + Fallback NLP
+│       └── PdfImportService.php          # Service parser e-statement PDF bank
 ├── config/
 │   └── services.php                      # Konfigurasi integrasi third-party & OpenRouter
 ├── database/
@@ -246,7 +297,8 @@ finansia/
 ├── decoder/
 │   ├── .venv/                            # Python virtual environment
 │   ├── decoder.py                        # Script decoder & decryptor Excel e-statement
-│   └── requirements.txt                  # Dependensi Python (pandas, msoffcrypto, openpyxl)
+│   ├── pdf_extractor.py                  # Script ekstraksi mutasi e-statement PDF
+│   └── requirements.txt                  # Dependensi Python (pandas, msoffcrypto, pypdf)
 ├── resources/
 │   ├── css/                              # Berkas CSS & Tailwind
 │   ├── js/                               # Berkas JavaScript & Alpine/jQuery setup
@@ -254,11 +306,14 @@ finansia/
 │       ├── components/
 │       │   └── ai-chatbot.blade.php      # Komponen UI Chatbot AI mengambang
 │       ├── dashboard.blade.php           # Tampilan dashboard keuangan interaktif
+│       ├── future-planner/
+│       │   ├── index.blade.php           # Tampilan daftar kartu rencana & metrik KPI
+│       │   └── show.blade.php            # Tampilan spreadsheet outline & task tree inline
 │       ├── saving.blade.php              # Tampilan daftar rekening & modal CRUD
 │       ├── saving_detail.blade.php       # Tampilan rincian & grafik rekening
 │       └── transaction.blade.php         # Tampilan tabel transaksi & modal import
 └── routes/
-    ├── api.php                           # Endpoint API
+    ├── api.php                           # Endpoint API REST v1
     └── web.php                           # Rute web aplikasi utama
 ```
 

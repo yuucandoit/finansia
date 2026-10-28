@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\SavingController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\BudgetController;
+use App\Http\Controllers\Api\FuturePlanController;
 use App\Http\Controllers\Api\AiChatController;
 use App\Http\Controllers\Api\UserApprovalController;
 
@@ -71,6 +72,18 @@ Route::prefix('v1')->group(function () {
         Route::get('/budgets/{id}/transactions', [BudgetController::class, 'transactions']);
         Route::put('/budgets/{id}', [BudgetController::class, 'update']);
         Route::delete('/budgets/{id}', [BudgetController::class, 'destroy']);
+
+        // --- Future Planner (Plans & Nested Task Items) ---
+        Route::get('/future-planner', [FuturePlanController::class, 'index']);
+        Route::post('/future-planner', [FuturePlanController::class, 'store']);
+        Route::get('/future-planner/{futurePlan}', [FuturePlanController::class, 'show']);
+        Route::put('/future-planner/{futurePlan}', [FuturePlanController::class, 'update']);
+        Route::delete('/future-planner/{futurePlan}', [FuturePlanController::class, 'destroy']);
+        Route::post('/future-planner/{futurePlan}/items', [FuturePlanController::class, 'storeItem']);
+        Route::put('/future-planner/{futurePlan}/items/{item}', [FuturePlanController::class, 'updateItem']);
+        Route::patch('/future-planner/{futurePlan}/items/{item}/reparent', [FuturePlanController::class, 'reparentItem']);
+        Route::patch('/future-planner/{futurePlan}/items/{item}/toggle', [FuturePlanController::class, 'toggleItem']);
+        Route::delete('/future-planner/{futurePlan}/items/{item}', [FuturePlanController::class, 'destroyItem']);
 
         // --- Asisten Finansial AI ---
         Route::prefix('ai')->group(function () {

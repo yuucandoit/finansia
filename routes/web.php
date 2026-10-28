@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FuturePlanController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SavingController;
 use App\Http\Controllers\TransactionController;
@@ -41,6 +42,20 @@ Route::prefix('anggaran')->middleware(['auth', 'verified'])->group(function () {
     Route::get('/{id}/transactions', [BudgetController::class, 'transactions'])->name('budget.transactions');
     Route::put('/{budget}', [BudgetController::class, 'update'])->name('budget.update');
     Route::delete('/{budget}', [BudgetController::class, 'destroy'])->name('budget.destroy');
+});
+
+Route::prefix('future-planner')->middleware(['auth', 'verified'])->group(function () {
+    Route::get('/', [FuturePlanController::class, 'index'])->name('future-planner.index');
+    Route::post('/store', [FuturePlanController::class, 'store'])->name('future-planner.store');
+    Route::get('/{futurePlan}', [FuturePlanController::class, 'show'])->name('future-planner.show');
+    Route::put('/{futurePlan}', [FuturePlanController::class, 'update'])->name('future-planner.update');
+    Route::delete('/{futurePlan}', [FuturePlanController::class, 'destroy'])->name('future-planner.destroy');
+
+    Route::post('/{futurePlan}/items', [FuturePlanController::class, 'storeItem'])->name('future-planner.items.store');
+    Route::put('/{futurePlan}/items/{item}', [FuturePlanController::class, 'updateItem'])->name('future-planner.items.update');
+    Route::patch('/{futurePlan}/items/{item}/reparent', [FuturePlanController::class, 'reparentItem'])->name('future-planner.items.reparent');
+    Route::patch('/{futurePlan}/items/{item}/toggle', [FuturePlanController::class, 'toggleItem'])->name('future-planner.items.toggle');
+    Route::delete('/{futurePlan}/items/{item}', [FuturePlanController::class, 'destroyItem'])->name('future-planner.items.destroy');
 });
 
 Route::middleware('auth')->group(function () {

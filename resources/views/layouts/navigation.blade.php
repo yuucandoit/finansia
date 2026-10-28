@@ -35,6 +35,11 @@
                         {{ __('Anggaran') }}
                     </x-nav-link>
                 </div>
+                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                    <x-nav-link :href="route('future-planner.index')" :active="request()->routeIs('future-planner.*')">
+                        {{ __('Future Planner') }}
+                    </x-nav-link>
+                </div>
                 @if(Auth::user()->isMasterMind())
                     <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                         <x-nav-link :href="route('admin.approvals.index')" :active="request()->routeIs('admin.approvals.*')" class="flex items-center gap-1.5">
@@ -117,6 +122,9 @@
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('budget.index')" :active="request()->routeIs('budget.*')">
                 {{ __('Anggaran') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('future-planner.index')" :active="request()->routeIs('future-planner.*')">
+                {{ __('Future Planner') }}
             </x-responsive-nav-link>
             @if(Auth::user()->isMasterMind())
                 @php $pendingCount = \App\Models\User::pendingApprovalsCount(); @endphp

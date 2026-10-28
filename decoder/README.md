@@ -19,7 +19,7 @@ pip install -r requirements.txt
 
 ## 🔧 Usage
 
-### 1. **Decoder** - Parse E-Statement Bank
+### 1. **Decoder** - Parse E-Statement Bank (Excel .xlsx/.xls)
 
 ```bash
 python decoder.py <bank_type> <file_path> <password>
@@ -41,7 +41,34 @@ python decoder.py bri /path/to/statement.xlsx ""
 
 ---
 
-### 2. **AI Helper** - Financial Analysis
+### 2. **PDF Extractor** - Parse E-Statement Bank (PDF)
+
+```bash
+python pdf_extractor.py <path_pdf> [bank_code] [password]
+```
+
+**Contoh**:
+```bash
+# Mandiri e-Statement PDF (terenkripsi)
+python pdf_extractor.py "e-Statement_Mandiri.pdf" mandiri "mypassword123"
+
+# Bank Jago History Mutasi (non-encrypted)
+python pdf_extractor.py "Jago_Main_Pocket_History.pdf" jago
+
+# Auto-detect Bank & Password otomatis
+python pdf_extractor.py "e-Statement.pdf" auto "password"
+```
+
+**Supported Banks & Fitur PDF**:
+- ✅ Bank Mandiri (e-Statement Livin' PDF)
+- ✅ Bank Jago (Statement Pocket PDF)
+- ✅ Auto-detect bank dari teks dokumen (`auto`)
+- ✅ Mendukung dokumen terproteksi password (PIN / Tanggal Lahir)
+- ✅ Output standar JSON kompatibel dengan backend Laravel
+
+---
+
+### 3. **AI Helper** - Financial Analysis
 
 #### Test AI
 ```bash
