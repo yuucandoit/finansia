@@ -21,7 +21,60 @@
                     @endif
                 </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                <!-- Widget Indikator Pengguna Aktif (Lingkaran Huruf Pertama) -->
+                <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-2xl border border-gray-200 shadow-2xs">
+                    <div class="flex items-center gap-1.5 text-xs text-gray-500 font-medium">
+                        <span class="relative flex h-2.5 w-2.5">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <span class="hidden md:inline text-[11px] font-semibold text-emerald-700">Aktif</span>
+                    </div>
+
+                    <!-- Container Avatar Bulat Huruf Pertama Pengguna Aktif -->
+                    <div id="activeUsersList" class="flex items-center -space-x-1.5 hover:space-x-1 transition-all">
+                        @forelse($activeUsers as $u)
+                            <div class="relative group user-avatar-badge" data-user-id="{{ $u['id'] }}">
+                                <div class="w-8 h-8 rounded-full {{ $u['color'] }} text-white font-bold text-xs flex items-center justify-center ring-2 ring-white shadow-2xs transition transform hover:scale-110 cursor-pointer select-none">
+                                    {{ $u['initial'] }}
+                                </div>
+                                <!-- Dot hijau indikator online -->
+                                <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+
+                                <!-- Tooltip info user -->
+                                <div class="absolute right-0 top-full mt-2 hidden group-hover:flex flex-col items-center z-50 pointer-events-none">
+                                    <div class="bg-gray-900 text-white text-[11px] rounded-lg py-1 px-2.5 whitespace-nowrap shadow-xl">
+                                        <p class="font-semibold">{{ $u['name'] }} {{ $u['is_current'] ? '(Anda)' : '' }}</p>
+                                        <p class="text-[10px] text-emerald-300 flex items-center gap-1">
+                                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                                            {{ $u['role_label'] }} • Sedang aktif
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        @empty
+                            <div class="w-8 h-8 rounded-full bg-gray-200 text-gray-600 font-bold text-xs flex items-center justify-center ring-2 ring-white shadow-2xs" title="Hanya Anda yang saat ini membuka rencana ini">
+                                {{ strtoupper(mb_substr(auth()->user()->name, 0, 1)) }}
+                            </div>
+                        @endforelse
+                    </div>
+
+                    <div class="h-4 w-px bg-gray-200 mx-0.5"></div>
+
+                    <!-- Tombol Kolaborasi & Kode Unik -->
+                    <button type="button"
+                            onclick="openCollaborationModal()"
+                            class="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition"
+                            title="Buka Pengaturan Anggota & Kode Unik">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        <span class="font-mono text-[11px] font-bold">{{ $futurePlan->share_code }}</span>
+                        <span class="text-[10px] font-bold bg-indigo-200 text-indigo-800 px-1.5 py-0.2 rounded-md">{{ $allMembers->count() }}</span>
+                    </button>
+                </div>
+
                 <!-- Toggle Full Width Button -->
                 <button type="button" onclick="toggleFullWidthMode()" id="btnToggleWidth" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-gray-50 text-gray-700 font-medium text-xs rounded-xl border border-gray-200 shadow-2xs transition" title="Ganti Mode Tampilan Lebar">
                     <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -464,6 +517,196 @@
                 </div>
             </div>
 
+        </div>
+    </div>
+
+    <!-- MODAL KOLABORASI, KODE UNIK & KELOLA ANGGOTA -->
+    <div id="collaborationModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity bg-gray-900/60 backdrop-blur-xs" onclick="closeCollaborationModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+
+            <div class="inline-block w-full max-w-xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl sm:align-middle">
+                <!-- Header Modal -->
+                <div class="flex items-center justify-between pb-4 border-b border-gray-100">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">
+                            👥
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-900">Kolaborasi & Anggota Rencana</h3>
+                            <p class="text-xs text-gray-500">Kelola anggota yang dapat melihat dan mengisi rencana ini bersama.</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="closeCollaborationModal()" class="text-gray-400 hover:text-gray-600 rounded-lg p-1.5 hover:bg-gray-100 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="mt-5 space-y-6">
+                    <!-- SECTION 1: KODE UNIK RENCANA -->
+                    <div class="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>🔑</span>
+                                <span>Kode Unik Rencana</span>
+                            </label>
+                            <span class="text-[11px] text-indigo-600 font-medium">Bisa dibagikan ke teman</span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <div class="flex-1 bg-white border border-indigo-200 rounded-xl px-3.5 py-2 font-mono font-bold text-lg text-indigo-700 tracking-wider flex items-center justify-between shadow-2xs">
+                                <span id="shareCodeText">{{ $futurePlan->share_code }}</span>
+                                <span class="text-[10px] uppercase font-sans font-semibold bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full">Kode Unik</span>
+                            </div>
+                            <button type="button"
+                                    id="btnCopyCode"
+                                    onclick="copyShareCode('{{ $futurePlan->share_code }}')"
+                                    class="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-xl shadow-2xs transition hover:shadow flex items-center gap-1.5 whitespace-nowrap">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                <span id="btnCopyCodeText">Salin Kode</span>
+                            </button>
+                        </div>
+
+                        <div class="mt-2.5 flex items-center justify-between text-xs text-indigo-900/80">
+                            <span>Atau bagikan link langsung:</span>
+                            <button type="button"
+                                    id="btnCopyLink"
+                                    onclick="copyShareLink('{{ route('future-planner.join.form', $futurePlan->share_code) }}')"
+                                    class="text-indigo-600 hover:text-indigo-800 font-semibold underline inline-flex items-center gap-1">
+                                🔗 Salin Link Undangan
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SECTION 2: TAMBAH ANGGOTA LANGSUNG (KHUSUS PEMILIK) -->
+                    @if($isOwner)
+                        <div class="border border-gray-200 rounded-2xl p-4 bg-gray-50/50">
+                            <label class="block text-xs font-bold text-gray-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <span>➕</span>
+                                <span>Undang Anggota Langsung</span>
+                            </label>
+                            <form action="{{ route('future-planner.members.store', $futurePlan) }}" method="POST" class="space-y-3">
+                                @csrf
+                                <div class="flex flex-col sm:flex-row gap-2">
+                                    <input type="email"
+                                           name="email"
+                                           required
+                                           placeholder="Masukkan email pengguna (cth: teman@gmail.com)"
+                                           class="flex-1 text-xs border border-gray-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white">
+                                    <select name="role" class="text-xs border border-gray-300 rounded-xl px-3 py-2 bg-white focus:ring-2 focus:ring-indigo-500">
+                                        <option value="editor">Editor (Bisa kelola item)</option>
+                                        <option value="viewer">Viewer (Hanya lihat)</option>
+                                    </select>
+                                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs rounded-xl shadow-2xs transition whitespace-nowrap">
+                                        + Tambahkan
+                                    </button>
+                                </div>
+                                <p class="text-[11px] text-gray-500">Pengguna harus sudah memiliki akun terdaftar di Finansia.</p>
+                            </form>
+                        </div>
+                    @endif
+
+                    <!-- SECTION 3: DAFTAR ANGGOTA RENCANA -->
+                    <div>
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>👥</span>
+                                <span>Daftar Anggota ({{ $allMembers->count() }})</span>
+                            </h4>
+                            <span class="text-[11px] text-gray-400">Status Online diperbarui berkala</span>
+                        </div>
+
+                        <div class="divide-y divide-gray-100 max-h-60 overflow-y-auto rounded-xl border border-gray-200">
+                            @foreach($allMembers as $member)
+                                @php
+                                    $name = trim($member->name ?: 'User');
+                                    $initial = strtoupper(mb_substr($name, 0, 1));
+                                    $isThisMemberOwner = $futurePlan->isOwner($member);
+                                    $isActive = $member->pivot->last_active_at && \Carbon\Carbon::parse($member->pivot->last_active_at)->gte(now()->subMinutes(3));
+                                    $memberRole = $member->pivot->role ?? ($isThisMemberOwner ? 'owner' : 'editor');
+
+                                    $colors = ['bg-indigo-600', 'bg-emerald-600', 'bg-violet-600', 'bg-rose-600', 'bg-sky-600', 'bg-amber-600', 'bg-teal-600', 'bg-fuchsia-600'];
+                                    $colorClass = $colors[$member->id % count($colors)];
+                                @endphp
+                                <div class="p-3 flex items-center justify-between gap-3 hover:bg-gray-50/70 transition">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <!-- Lingkaran Huruf Pertama -->
+                                        <div class="relative shrink-0">
+                                            <div class="w-9 h-9 rounded-full {{ $colorClass }} text-white font-bold text-xs flex items-center justify-center ring-2 ring-white shadow-2xs">
+                                                {{ $initial }}
+                                            </div>
+                                            @if($isActive)
+                                                <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" title="Sedang aktif"></span>
+                                            @endif
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="flex items-center gap-1.5 flex-wrap">
+                                                <p class="text-xs font-bold text-gray-800 truncate">{{ $name }}</p>
+                                                @if(auth()->id() === $member->id)
+                                                    <span class="text-[10px] font-semibold bg-gray-100 text-gray-600 px-1.5 py-0.2 rounded">Anda</span>
+                                                @endif
+                                                @if($isThisMemberOwner)
+                                                    <span class="text-[10px] font-semibold bg-indigo-100 text-indigo-700 px-1.5 py-0.2 rounded-full">Pemilik</span>
+                                                @else
+                                                    <span class="text-[10px] font-medium bg-gray-100 text-gray-600 px-1.5 py-0.2 rounded-full capitalize">{{ $memberRole }}</span>
+                                                @endif
+                                            </div>
+                                            <div class="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
+                                                <span class="truncate">{{ $member->email }}</span>
+                                                <span>•</span>
+                                                @if($isActive)
+                                                    <span class="text-emerald-600 font-semibold flex items-center gap-1">
+                                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+                                                        Sedang Aktif
+                                                    </span>
+                                                @else
+                                                    <span>{{ $member->pivot->last_active_at ? \Carbon\Carbon::parse($member->pivot->last_active_at)->diffForHumans() : 'Belum aktif' }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        @if($isOwner && !$isThisMemberOwner)
+                                            <!-- Hapus Anggota (Hanya Pemilik) -->
+                                            <form action="{{ route('future-planner.members.destroy', [$futurePlan, $member]) }}" method="POST" onsubmit="return confirm('Keluarkan anggota {{ $name }} dari rencana ini?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition" title="Keluarkan Anggota">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
+                                                </button>
+                                            </form>
+                                        @elseif(!$isOwner && auth()->id() === $member->id)
+                                            <!-- Keluar dari Rencana (Anggota Mandiri) -->
+                                            <form action="{{ route('future-planner.members.destroy', [$futurePlan, $member]) }}" method="POST" onsubmit="return confirm('Apakah Anda yakin ingin keluar dari rencana kolaborasi ini?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="text-xs text-rose-600 hover:text-rose-800 font-medium px-2 py-1 rounded hover:bg-rose-50 transition">
+                                                    Keluar
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Modal -->
+                <div class="mt-6 flex justify-end">
+                    <button type="button" onclick="closeCollaborationModal()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition">
+                        Tutup
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1124,5 +1367,110 @@
                 }
             });
         }
+
+        // -------------------------------------------------------------------------
+        // 7. KOLABORASI, SHARE CODE & ONLINE PRESENCE (HEARTBEAT)
+        // -------------------------------------------------------------------------
+        function openCollaborationModal() {
+            document.getElementById('collaborationModal').classList.remove('hidden');
+        }
+
+        function closeCollaborationModal() {
+            document.getElementById('collaborationModal').classList.add('hidden');
+        }
+
+        function copyShareCode(code) {
+            navigator.clipboard.writeText(code).then(() => {
+                const btnText = document.getElementById('btnCopyCodeText');
+                if (btnText) {
+                    const original = btnText.textContent;
+                    btnText.textContent = 'Tersalin! ✅';
+                    setTimeout(() => { btnText.textContent = original; }, 2000);
+                }
+            }).catch(() => {
+                alert('Kode rencana: ' + code);
+            });
+        }
+
+        function copyShareLink(url) {
+            navigator.clipboard.writeText(url).then(() => {
+                const btn = document.getElementById('btnCopyLink');
+                if (btn) {
+                    const original = btn.innerHTML;
+                    btn.innerHTML = '✅ Link Undangan Tersalin!';
+                    setTimeout(() => { btn.innerHTML = original; }, 2000);
+                }
+            }).catch(() => {
+                alert('Link undangan: ' + url);
+            });
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.toString().replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // Heartbeat interval polling untuk status user online realtime
+        function runPresenceHeartbeat() {
+            fetch("{{ route('future-planner.heartbeat', $futurePlan) }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': CSRF_TOKEN,
+                    'Accept': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.active_users) {
+                    renderActiveUsers(data.active_users);
+                }
+            })
+            .catch(err => {
+                console.debug('Heartbeat ping:', err);
+            });
+        }
+
+        function renderActiveUsers(users) {
+            const container = document.getElementById('activeUsersList');
+            if (!container || !users) return;
+
+            if (users.length === 0) {
+                container.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-gray-200 text-gray-600 font-bold text-xs flex items-center justify-center ring-2 ring-white shadow-2xs" title="Hanya Anda yang saat ini membuka rencana ini">
+                        {{ strtoupper(mb_substr(auth()->user()->name, 0, 1)) }}
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = users.map(u => `
+                <div class="relative group user-avatar-badge" data-user-id="${u.id}">
+                    <div class="w-8 h-8 rounded-full ${u.color || 'bg-indigo-600'} text-white font-bold text-xs flex items-center justify-center ring-2 ring-white shadow-2xs transition transform hover:scale-110 cursor-pointer select-none">
+                        ${escapeHtml(u.initial)}
+                    </div>
+                    <span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+                    <div class="absolute right-0 top-full mt-2 hidden group-hover:flex flex-col items-center z-50 pointer-events-none">
+                        <div class="bg-gray-900 text-white text-[11px] rounded-lg py-1 px-2.5 whitespace-nowrap shadow-xl">
+                            <p class="font-semibold">${escapeHtml(u.name)} ${u.is_current ? '(Anda)' : ''}</p>
+                            <p class="text-[10px] text-emerald-300 flex items-center gap-1">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                                ${escapeHtml(u.role_label || 'Anggota')} • Sedang aktif
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Jalankan heartbeat berkala setiap 20 detik
+        setInterval(runPresenceHeartbeat, 20000);
     </script>
 </x-app-layout>

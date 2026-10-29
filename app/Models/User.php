@@ -64,6 +64,13 @@ class User extends Authenticatable
         return $this->hasMany(FuturePlan::class);
     }
 
+    public function sharedFuturePlans()
+    {
+        return $this->belongsToMany(FuturePlan::class, 'future_plan_members')
+            ->withPivot(['role', 'status', 'last_active_at'])
+            ->withTimestamps();
+    }
+
     public function budgets()
     {
         return $this->hasMany(Budget::class);

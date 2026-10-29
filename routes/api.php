@@ -73,12 +73,16 @@ Route::prefix('v1')->group(function () {
         Route::put('/budgets/{id}', [BudgetController::class, 'update']);
         Route::delete('/budgets/{id}', [BudgetController::class, 'destroy']);
 
-        // --- Future Planner (Plans & Nested Task Items) ---
+        // --- Future Planner (Plans, Collaboration & Nested Task Items) ---
         Route::get('/future-planner', [FuturePlanController::class, 'index']);
         Route::post('/future-planner', [FuturePlanController::class, 'store']);
+        Route::post('/future-planner/join', [FuturePlanController::class, 'join']);
         Route::get('/future-planner/{futurePlan}', [FuturePlanController::class, 'show']);
         Route::put('/future-planner/{futurePlan}', [FuturePlanController::class, 'update']);
         Route::delete('/future-planner/{futurePlan}', [FuturePlanController::class, 'destroy']);
+        Route::post('/future-planner/{futurePlan}/heartbeat', [FuturePlanController::class, 'heartbeat']);
+        Route::post('/future-planner/{futurePlan}/members', [FuturePlanController::class, 'addMember']);
+        Route::delete('/future-planner/{futurePlan}/members/{user}', [FuturePlanController::class, 'removeMember']);
         Route::post('/future-planner/{futurePlan}/items', [FuturePlanController::class, 'storeItem']);
         Route::put('/future-planner/{futurePlan}/items/{item}', [FuturePlanController::class, 'updateItem']);
         Route::patch('/future-planner/{futurePlan}/items/{item}/reparent', [FuturePlanController::class, 'reparentItem']);

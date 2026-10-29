@@ -110,6 +110,14 @@
 
 ### 6. 🎯 Future Planner (Rencana Masa Depan & Spreadsheet Outline Task Tree)
 * **Master Future Plan**: Buat rencana finansial atau proyek masa depan (misal: *"Setup Ruang Kerja 2027"*, *"Liburan ke Jepang"*, *"Renovasi Rumah"*), lengkap dengan deskripsi, target tanggal selesai, status, dan label warna.
+* **Kolaborasi Multi-Pengguna & Kode Unik (Share Code)**:
+  * Setiap rencana otomatis memiliki kode unik unik 6-karakter (misal: **`FP-A8B9C1`**) untuk dibagikan ke anggota tim atau keluarga.
+  * Tombol **`[🔗 Join dengan Kode]`** di dashboard memungkinkan pengguna lain bergabung ke rencana kolaborasi secara instan melalui input kode unik atau link undangan langsung.
+  * **Undang Anggota Langsung**: Pemilik dapat menambahkan pengguna lain secara langsung via email terdaftar dengan pilihan peran (*Editor* atau *Viewer*).
+* **Indikator Pengguna Aktif Real-Time (Online Presence)**:
+  * Di pojok kanan atas halaman rencana, terdapat widget status kehadiran aktif yang menampilkan avatar berbentuk **lingkaran dengan huruf pertama nama pengguna** (inisial kapital).
+  * Dilengkapi titik hijau berkedip (*live pulsing dot*) dan tooltip detail nama/peran untuk mengetahui siapa saja yang sedang membuka dan mengedit rencana secara bersamaan.
+  * Sinkronisasi otomatis di latar belakang melalui mekanisme *heartbeat polling interval* (setiap 20 detik).
 * **Breakdown Item Bertingkat (Parent-Child WBS Tree)**:
   * Struktur tugas dan kebutuhan bercabang bertingkat tanpa batas (Level 1, Level 2, Level 3).
   * Dilengkapi konektor visual pohon (`└──`, `│ └──`), badge level, dan tombol lipat/buka cabang (*expand/collapse*).
@@ -129,7 +137,7 @@
   * Menampilkan akumulasi total biaya keseluruhan rencana, total unit barang (Qty), perbandingan dana yang sudah terbeli vs sisa kebutuhan dana, serta persentase progres pemenuhan.
 * **Mode Tampilan Widescreen (Full Width)**:
   * Tampilan default membentang penuh di seluruh layar monitor widescreen untuk pengalaman spreadsheet yang lapang, dilengkapi tombol toggle *Mode Full Width / Mode Boxed*.
-* **REST API Lengkap**: Terintegrasi endpoint `/api/v1/future-planner` yang siap dihubungkan ke aplikasi mobile (Flutter / Kotlin Multiplatform).
+* **REST API Lengkap**: Terintegrasi endpoint `/api/v1/future-planner` lengkap dengan aksi kolaborasi (`join`, `heartbeat`, `members`) yang siap dihubungkan ke aplikasi mobile (Flutter / Kotlin Multiplatform).
 
 ### 7. 📊 Perencanaan Anggaran Bulanan (Budgeting)
 * **Alokasi Pos Anggaran**: Tentukan batas pengeluaran per pos atau kategori bulanan (kebutuhan primer, hiburan, investasi, dll.).

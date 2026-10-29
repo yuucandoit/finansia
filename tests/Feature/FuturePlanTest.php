@@ -282,4 +282,140 @@ class FuturePlanTest extends TestCase
         $deletePlanResponse->assertStatus(200);
         $this->assertNull(FuturePlan::find($planId));
     }
+
+    public function test_plan_auto_generates_share_code_and_attaches_owner_as_member(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Rencana Kolaborasi',
+        ]);
+
+        $this->assertNotEmpty($plan->share_code);
+        $this->assertStringStartsWith('FP-', $plan->share_code);
+
+        $this->assertTrue($plan->isOwner($this->user));
+        $this->assertTrue($plan->hasAccess($this->user));
+
+        $ownerMember = $plan->members()->where('users.id', $this->user->id)->first();
+        $this->assertNotNull($ownerMember);
+        $this->assertEquals('owner', $ownerMember->pivot->role);
+    }
+
+    public function test_user_can_join_future_plan_using_share_code(): void
+    {
+        $owner = $this->user;
+        $collaborator = User::factory()->create(['name' => 'Budi Santoso', 'status' => 'approved']);
+
+        $plan = FuturePlan::create([
+            'user_id' => $owner->id,
+            'title'   => 'Liburan Bareng',
+        ]);
+
+        // Collaborator belum punya akses
+        $this->assertFalse($plan->hasAccess($collaborator));
+
+        // Bergabung via kode unik
+        $response = $this->actingAs($collaborator)->post(route('future-planner.join'), [
+            'code' => $plan->share_code,
+        ]);
+
+        $response->assertRedirect(route('future-planner.show', $plan));
+        $response->assertSessionHas('success');
+
+        // Collaborator sekarang memiliki akses
+        $plan->refresh();
+        $this->assertTrue($plan->hasAccess($collaborator));
+        $this->assertFalse($plan->isOwner($collaborator));
+
+        // Collaborator dapat melihat detail plan dan menambah item
+        $this->actingAs($collaborator)->get(route('future-planner.show', $plan))->assertStatus(200);
+
+        $itemResponse = $this->actingAs($collaborator)->post(route('future-planner.items.store', $plan), [
+            'title'      => 'Sewa Mobil',
+            'quantity'   => 1,
+            'unit_price' => 700000,
+        ]);
+        $itemResponse->assertSessionHas('success');
+    }
+
+    public function test_owner_can_add_member_directly_by_email(): void
+    {
+        $friend = User::factory()->create([
+            'name'   => 'Citra Lestari',
+            'email'  => 'citra@example.com',
+            'status' => 'approved',
+        ]);
+
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Proyek Kantor',
+        ]);
+
+        $response = $this->actingAs($this->user)->post(route('future-planner.members.store', $plan), [
+            'email' => 'citra@example.com',
+            'role'  => 'editor',
+        ]);
+
+        $response->assertSessionHas('success');
+        $this->assertTrue($plan->hasAccess($friend));
+    }
+
+    public function test_non_owner_cannot_add_members_directly(): void
+    {
+        $owner = $this->user;
+        $member = User::factory()->create(['status' => 'approved']);
+        $stranger = User::factory()->create(['email' => 'stranger@example.com', 'status' => 'approved']);
+
+        $plan = FuturePlan::create([
+            'user_id' => $owner->id,
+            'title'   => 'Proyek Rahasia',
+        ]);
+        $plan->addMemberByUser($member, 'editor');
+
+        $response = $this->actingAs($member)->post(route('future-planner.members.store', $plan), [
+            'email' => 'stranger@example.com',
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_heartbeat_updates_presence_and_returns_active_users(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Rencana Aktif',
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson(route('future-planner.heartbeat', $plan));
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('success', true);
+
+        $activeUsers = $response->json('active_users');
+        $this->assertNotEmpty($activeUsers);
+
+        $firstUser = $activeUsers[0];
+        $this->assertEquals($this->user->id, $firstUser['id']);
+        $this->assertEquals(strtoupper(mb_substr($this->user->name, 0, 1)), $firstUser['initial']);
+        $this->assertNotEmpty($firstUser['color']);
+    }
+
+    public function test_show_page_displays_active_user_initial_avatar(): void
+    {
+        $user = User::factory()->create([
+            'name'   => 'Dimas Pratama',
+            'status' => 'approved',
+        ]);
+
+        $plan = FuturePlan::create([
+            'user_id' => $user->id,
+            'title'   => 'Beli Rumah Impian',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('future-planner.show', $plan));
+
+        $response->assertStatus(200);
+        $response->assertSee('D'); // Huruf pertama dari "Dimas Pratama"
+        $response->assertSee($plan->share_code);
+    }
 }

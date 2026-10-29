@@ -6,7 +6,10 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class FuturePlan extends Model
 {
@@ -21,6 +24,7 @@ class FuturePlan extends Model
         'target_date',
         'status',
         'color',
+        'share_code',
     ];
 
     protected $casts = [
@@ -33,9 +37,45 @@ class FuturePlan extends Model
     public const STATUS_COMPLETED   = 'completed';
     public const STATUS_CANCELLED   = 'cancelled';
 
+    protected static function booted(): void
+    {
+        static::creating(function (FuturePlan $plan) {
+            if (empty($plan->share_code)) {
+                $plan->share_code = static::generateUniqueShareCode();
+            }
+        });
+
+        static::created(function (FuturePlan $plan) {
+            // Daftarkan pembuat rencana sebagai anggota pemilik (owner)
+            $plan->members()->syncWithoutDetaching([
+                $plan->user_id => [
+                    'role'           => 'owner',
+                    'status'         => 'active',
+                    'last_active_at' => now(),
+                ]
+            ]);
+        });
+    }
+
+    public static function generateUniqueShareCode(): string
+    {
+        do {
+            $code = 'FP-' . strtoupper(Str::random(6));
+        } while (static::where('share_code', $code)->exists());
+
+        return $code;
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function members(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'future_plan_members')
+            ->withPivot(['role', 'status', 'last_active_at'])
+            ->withTimestamps();
     }
 
     public function items(): HasMany
@@ -51,6 +91,120 @@ class FuturePlan extends Model
             ->whereNull('parent_id')
             ->orderBy('order')
             ->orderBy('id');
+    }
+
+    /**
+     * Scope untuk mengambil seluruh rencana yang dimiliki atau dibagikan ke pengguna.
+     */
+    public function scopeAccessibleBy($query, int $userId)
+    {
+        return $query->where(function ($q) use ($userId) {
+            $q->where('user_id', $userId)
+                ->orWhereHas('members', function ($mq) use ($userId) {
+                    $mq->where('users.id', $userId)
+                        ->where('future_plan_members.status', 'active');
+                });
+        });
+    }
+
+    /**
+     * Memeriksa apakah seorang user memiliki hak akses (pembuat atau anggota aktif).
+     */
+    public function hasAccess(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if ($this->user_id === $user->id) {
+            return true;
+        }
+
+        return $this->members()
+            ->where('users.id', $user->id)
+            ->where('future_plan_members.status', 'active')
+            ->exists();
+    }
+
+    /**
+     * Memeriksa apakah user adalah pemilik rencana.
+     */
+    public function isOwner(?User $user): bool
+    {
+        return $user && $this->user_id === $user->id;
+    }
+
+    /**
+     * Memperbarui timestamp aktivitas aktif pengguna.
+     */
+    public function touchActiveUser(User $user): void
+    {
+        $current = $this->members()->where('users.id', $user->id)->first();
+        $role = $current ? ($current->pivot->role ?? 'editor') : ($this->isOwner($user) ? 'owner' : 'editor');
+
+        $this->members()->syncWithoutDetaching([
+            $user->id => [
+                'role'           => $role,
+                'status'         => 'active',
+                'last_active_at' => now(),
+            ]
+        ]);
+    }
+
+    /**
+     * Menambahkan user sebagai anggota rencana.
+     */
+    public function addMemberByUser(User $user, string $role = 'editor'): void
+    {
+        $role = $this->isOwner($user) ? 'owner' : $role;
+
+        $this->members()->syncWithoutDetaching([
+            $user->id => [
+                'role'           => $role,
+                'status'         => 'active',
+                'last_active_at' => now(),
+            ]
+        ]);
+    }
+
+    /**
+     * Mengambil daftar user yang sedang aktif (terdeteksi dalam 3 menit terakhir).
+     */
+    public function getActiveUsers(): Collection
+    {
+        $activeMembers = $this->members()
+            ->where('future_plan_members.status', 'active')
+            ->where('future_plan_members.last_active_at', '>=', now()->subMinutes(3))
+            ->get();
+
+        return $activeMembers->map(function ($u) {
+            $name = trim($u->name ?: 'User');
+            $initial = strtoupper(mb_substr($name, 0, 1));
+            $colors = [
+                'bg-indigo-600',
+                'bg-emerald-600',
+                'bg-violet-600',
+                'bg-rose-600',
+                'bg-sky-600',
+                'bg-amber-600',
+                'bg-teal-600',
+                'bg-fuchsia-600',
+            ];
+            $colorClass = $colors[$u->id % count($colors)];
+
+            return [
+                'id'             => $u->id,
+                'name'           => $name,
+                'email'          => $u->email,
+                'initial'        => $initial,
+                'color'          => $colorClass,
+                'role'           => $u->pivot->role ?? ($this->isOwner($u) ? 'owner' : 'editor'),
+                'role_label'     => (($u->pivot->role ?? '') === 'owner' || $this->isOwner($u)) ? 'Pemilik' : 'Anggota',
+                'is_owner'       => $this->isOwner($u),
+                'is_current'     => auth()->id() === $u->id,
+                'last_active_at' => $u->pivot->last_active_at ? Carbon::parse($u->pivot->last_active_at)->diffForHumans() : 'baru saja',
+            ];
+        });
     }
 
     /**

@@ -188,4 +188,49 @@ class FuturePlanTest extends TestCase
         $this->assertEquals('Akomodasi Hotel', $tree[3]->title);
         $this->assertEquals(0, $tree[3]->depth);
     }
+
+    public function test_future_plan_active_users_returns_first_letter_initial_and_color(): void
+    {
+        $user = User::factory()->create([
+            'name'   => 'Eko Kurniawan',
+            'status' => 'approved',
+        ]);
+
+        $plan = FuturePlan::create([
+            'user_id' => $user->id,
+            'title'   => 'Test Active Users',
+        ]);
+
+        $plan->touchActiveUser($user);
+
+        $activeUsers = $plan->getActiveUsers();
+        $this->assertCount(1, $activeUsers);
+
+        $first = $activeUsers->first();
+        $this->assertEquals('E', $first['initial']); // Huruf pertama dari "Eko"
+        $this->assertEquals('Eko Kurniawan', $first['name']);
+        $this->assertNotEmpty($first['color']);
+        $this->assertEquals('owner', $first['role']);
+    }
+
+    public function test_future_plan_has_access_for_owner_and_members(): void
+    {
+        $owner = User::factory()->create(['status' => 'approved']);
+        $member = User::factory()->create(['status' => 'approved']);
+        $outsider = User::factory()->create(['status' => 'approved']);
+
+        $plan = FuturePlan::create([
+            'user_id' => $owner->id,
+            'title'   => 'Akses Kolaborasi',
+        ]);
+
+        $this->assertTrue($plan->hasAccess($owner));
+        $this->assertFalse($plan->hasAccess($member));
+        $this->assertFalse($plan->hasAccess($outsider));
+
+        $plan->addMemberByUser($member, 'editor');
+
+        $this->assertTrue($plan->hasAccess($member));
+        $this->assertFalse($plan->hasAccess($outsider));
+    }
 }

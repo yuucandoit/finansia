@@ -47,9 +47,16 @@ Route::prefix('anggaran')->middleware(['auth', 'verified'])->group(function () {
 Route::prefix('future-planner')->middleware(['auth', 'verified'])->group(function () {
     Route::get('/', [FuturePlanController::class, 'index'])->name('future-planner.index');
     Route::post('/store', [FuturePlanController::class, 'store'])->name('future-planner.store');
+    Route::post('/join', [FuturePlanController::class, 'join'])->name('future-planner.join');
+    Route::get('/join/{code?}', [FuturePlanController::class, 'showJoinForm'])->name('future-planner.join.form');
+
     Route::get('/{futurePlan}', [FuturePlanController::class, 'show'])->name('future-planner.show');
     Route::put('/{futurePlan}', [FuturePlanController::class, 'update'])->name('future-planner.update');
     Route::delete('/{futurePlan}', [FuturePlanController::class, 'destroy'])->name('future-planner.destroy');
+
+    Route::post('/{futurePlan}/heartbeat', [FuturePlanController::class, 'heartbeat'])->name('future-planner.heartbeat');
+    Route::post('/{futurePlan}/members', [FuturePlanController::class, 'addMember'])->name('future-planner.members.store');
+    Route::delete('/{futurePlan}/members/{user}', [FuturePlanController::class, 'removeMember'])->name('future-planner.members.destroy');
 
     Route::post('/{futurePlan}/items', [FuturePlanController::class, 'storeItem'])->name('future-planner.items.store');
     Route::put('/{futurePlan}/items/{item}', [FuturePlanController::class, 'updateItem'])->name('future-planner.items.update');

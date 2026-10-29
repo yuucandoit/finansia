@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\FuturePlan;
 use App\Models\FuturePlanItem;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,15 +13,15 @@ use Illuminate\View\View;
 class FuturePlanController extends Controller
 {
     /**
-     * Halaman daftar seluruh Future Plan milik pengguna.
+     * Halaman daftar seluruh Future Plan milik pengguna dan rencana kolaborasi bersama.
      */
     public function index(Request $request): View
     {
         $user = auth()->user();
         $statusFilter = $request->query('status');
 
-        $query = FuturePlan::with(['rootItems.allChildren', 'items'])
-            ->where('user_id', $user->id)
+        $query = FuturePlan::with(['rootItems.allChildren', 'items', 'members', 'user'])
+            ->accessibleBy($user->id)
             ->latest('id');
 
         if ($statusFilter && in_array($statusFilter, [
@@ -34,9 +35,9 @@ class FuturePlanController extends Controller
 
         $plans = $query->paginate(12)->withQueryString();
 
-        // Ringkasan KPI seluruh rencana
+        // Ringkasan KPI seluruh rencana yang dapat diakses pengguna
         $allUserPlans = FuturePlan::with(['rootItems.allChildren', 'items'])
-            ->where('user_id', $user->id)
+            ->accessibleBy($user->id)
             ->get();
 
         $totalPlansCount = $allUserPlans->count();
@@ -87,11 +88,15 @@ class FuturePlanController extends Controller
     }
 
     /**
-     * Halaman Detail Future Plan: Menampilkan ringkasan dan daftar item tugas bertingkat (Parent-Child).
+     * Halaman Detail Future Plan: Menampilkan ringkasan, kolaborator aktif, dan daftar item tugas bertingkat.
      */
     public function show(FuturePlan $futurePlan, Request $request): View
     {
-        abort_if($futurePlan->user_id !== auth()->id(), 403, 'Akses ditolak.');
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak. Anda tidak memiliki izin untuk melihat rencana ini.');
+
+        // Update waktu aktif pengguna saat membuka halaman rencana
+        $futurePlan->touchActiveUser($user);
 
         $filter = $request->query('filter'); // 'all', 'pending', 'completed'
         $items = FuturePlanItem::getFlatTreeForPlan($futurePlan->id, $filter);
@@ -111,6 +116,13 @@ class FuturePlanController extends Controller
         $completedItemsCount = $futurePlan->completed_items_count;
         $totalQuantity = (int) $futurePlan->items()->sum('quantity');
 
+        // Kolaborator & Pengguna Aktif
+        $activeUsers = $futurePlan->getActiveUsers();
+        $allMembers = $futurePlan->members()
+            ->orderBy('future_plan_members.role', 'desc')
+            ->get();
+        $isOwner = $futurePlan->isOwner($user);
+
         return view('future-planner.show', compact(
             'futurePlan',
             'items',
@@ -122,8 +134,176 @@ class FuturePlanController extends Controller
             'totalItemsCount',
             'completedItemsCount',
             'totalQuantity',
-            'filter'
+            'filter',
+            'activeUsers',
+            'allMembers',
+            'isOwner'
         ));
+    }
+
+    /**
+     * Heartbeat endpoint untuk memperbarui status online user dan mengembalikan daftar user yang sedang aktif.
+     */
+    public function heartbeat(FuturePlan $futurePlan): JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak.');
+
+        $futurePlan->touchActiveUser($user);
+
+        return response()->json([
+            'success'      => true,
+            'active_users' => $futurePlan->getActiveUsers(),
+        ]);
+    }
+
+    /**
+     * Bergabung ke Future Plan menggunakan kode unik.
+     */
+    public function join(Request $request): RedirectResponse|JsonResponse
+    {
+        $validated = $request->validate([
+            'code' => 'required|string|max:50',
+        ], [
+            'code.required' => 'Kode rencana unik wajib dimasukkan.',
+        ]);
+
+        $rawCode = trim($validated['code']);
+        if (preg_match('/FP-[A-Z0-9]+/i', $rawCode, $matches)) {
+            $code = strtoupper($matches[0]);
+        } else {
+            $code = strtoupper($rawCode);
+        }
+
+        $plan = FuturePlan::where('share_code', $code)->first();
+
+        if (!$plan) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Kode rencana "' . $code . '" tidak ditemukan. Silakan periksa kembali kode unik rencana.',
+                ], 404);
+            }
+
+            return back()->with('error', 'Kode rencana "' . $code . '" tidak ditemukan. Pastikan kode unik sudah tepat.');
+        }
+
+        $user = auth()->user();
+        $plan->addMemberByUser($user, 'editor');
+        $plan->touchActiveUser($user);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success'      => true,
+                'message'      => 'Berhasil bergabung ke rencana "' . $plan->title . '"!',
+                'redirect_url' => route('future-planner.show', $plan),
+                'plan'         => $plan,
+            ]);
+        }
+
+        return redirect()
+            ->route('future-planner.show', $plan)
+            ->with('success', 'Selamat datang! Anda berhasil bergabung ke rencana kolaborasi "' . $plan->title . '".');
+    }
+
+    /**
+     * Direct join handler via link (misal: /future-planner/join/FP-XXXXXX).
+     */
+    public function showJoinForm(?string $code = null): RedirectResponse
+    {
+        if ($code) {
+            $cleanCode = strtoupper(trim($code));
+            $plan = FuturePlan::where('share_code', $cleanCode)->first();
+
+            if ($plan) {
+                $user = auth()->user();
+                $plan->addMemberByUser($user, 'editor');
+                $plan->touchActiveUser($user);
+
+                return redirect()
+                    ->route('future-planner.show', $plan)
+                    ->with('success', 'Selamat datang! Anda berhasil bergabung ke rencana kolaborasi "' . $plan->title . '".');
+            }
+        }
+
+        return redirect()
+            ->route('future-planner.index')
+            ->with('error', 'Kode rencana tidak valid atau tidak ditemukan.');
+    }
+
+    /**
+     * Menambahkan user lain langsung ke rencana via email.
+     */
+    public function addMember(Request $request, FuturePlan $futurePlan): RedirectResponse|JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->isOwner($user), 403, 'Hanya pemilik rencana yang berhak menambahkan anggota secara langsung.');
+
+        $validated = $request->validate([
+            'email' => 'required|email|exists:users,email',
+            'role'  => 'nullable|string|in:editor,viewer',
+        ], [
+            'email.required' => 'Email anggota wajib diisi.',
+            'email.email'    => 'Format email tidak valid.',
+            'email.exists'   => 'Pengguna dengan email tersebut tidak terdaftar di Finansia.',
+        ]);
+
+        $targetUser = User::where('email', strtolower(trim($validated['email'])))->firstOrFail();
+
+        $role = $validated['role'] ?? 'editor';
+        $futurePlan->addMemberByUser($targetUser, $role);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Pengguna ' . $targetUser->name . ' berhasil ditambahkan sebagai anggota rencana.',
+                'member'  => [
+                    'id'    => $targetUser->id,
+                    'name'  => $targetUser->name,
+                    'email' => $targetUser->email,
+                    'role'  => $role,
+                ],
+            ]);
+        }
+
+        return back()->with('success', 'Pengguna "' . $targetUser->name . '" berhasil ditambahkan ke dalam rencana ini.');
+    }
+
+    /**
+     * Menghapus anggota dari rencana atau keluar dari rencana bersama.
+     */
+    public function removeMember(FuturePlan $futurePlan, User $user): RedirectResponse|JsonResponse
+    {
+        $currentUser = auth()->user();
+
+        // Pemilik tidak dapat dikeluarkan
+        if ($futurePlan->isOwner($user)) {
+            abort(400, 'Pemilik rencana tidak dapat dihapus dari daftar anggota.');
+        }
+
+        // Hanya pemilik atau user yang bersangkutan yang boleh menghapus
+        if (!$futurePlan->isOwner($currentUser) && $currentUser->id !== $user->id) {
+            abort(403, 'Anda tidak memiliki hak untuk menghapus anggota ini.');
+        }
+
+        $futurePlan->members()->detach($user->id);
+
+        $isSelf = $currentUser->id === $user->id;
+
+        if (request()->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => $isSelf ? 'Anda berhasil keluar dari rencana.' : 'Anggota berhasil dihapus dari rencana.',
+            ]);
+        }
+
+        if ($isSelf) {
+            return redirect()
+                ->route('future-planner.index')
+                ->with('success', 'Anda telah keluar dari rencana "' . $futurePlan->title . '".');
+        }
+
+        return back()->with('success', 'Anggota "' . $user->name . '" berhasil dihapus dari rencana.');
     }
 
     /**
@@ -131,7 +311,8 @@ class FuturePlanController extends Controller
      */
     public function update(Request $request, FuturePlan $futurePlan): RedirectResponse|JsonResponse
     {
-        abort_if($futurePlan->user_id !== auth()->id(), 403, 'Akses ditolak.');
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak.');
 
         $validated = $request->validate([
             'title'       => 'required|string|max:255',
@@ -149,6 +330,8 @@ class FuturePlanController extends Controller
             'color'       => $validated['color'] ?? $futurePlan->color,
         ]);
 
+        $futurePlan->touchActiveUser($user);
+
         if ($request->wantsJson()) {
             return response()->json([
                 'success' => true,
@@ -161,11 +344,11 @@ class FuturePlanController extends Controller
     }
 
     /**
-     * Menghapus Future Plan beserta seluruh itemnya.
+     * Menghapus Future Plan beserta seluruh itemnya (Hanya Pemilik).
      */
     public function destroy(FuturePlan $futurePlan): RedirectResponse
     {
-        abort_if($futurePlan->user_id !== auth()->id(), 403, 'Akses ditolak.');
+        abort_unless($futurePlan->isOwner(auth()->user()), 403, 'Hanya pemilik rencana yang berhak menghapus rencana ini.');
 
         $title = $futurePlan->title;
         $futurePlan->delete();
@@ -180,7 +363,8 @@ class FuturePlanController extends Controller
      */
     public function storeItem(Request $request, FuturePlan $futurePlan): RedirectResponse|JsonResponse
     {
-        abort_if($futurePlan->user_id !== auth()->id(), 403, 'Akses ditolak.');
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak.');
 
         $validated = $request->validate([
             'parent_id'    => 'nullable|integer|exists:future_plan_items,id',
@@ -220,6 +404,8 @@ class FuturePlanController extends Controller
             'order'          => $nextOrder,
         ]);
 
+        $futurePlan->touchActiveUser($user);
+
         if ($request->wantsJson()) {
             $freshPlan = $futurePlan->fresh(['rootItems.allChildren', 'items']);
             return response()->json([
@@ -244,7 +430,8 @@ class FuturePlanController extends Controller
      */
     public function updateItem(Request $request, FuturePlan $futurePlan, FuturePlanItem $item): RedirectResponse|JsonResponse
     {
-        abort_if($futurePlan->user_id !== auth()->id() || $item->future_plan_id !== $futurePlan->id, 403, 'Akses ditolak.');
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user) && $item->future_plan_id === $futurePlan->id, 403, 'Akses ditolak.');
 
         $validated = $request->validate([
             'parent_id'    => 'nullable|integer|exists:future_plan_items,id',
@@ -280,6 +467,8 @@ class FuturePlanController extends Controller
             'is_completed' => array_key_exists('is_completed', $validated) ? (bool) $validated['is_completed'] : $item->is_completed,
         ]);
 
+        $futurePlan->touchActiveUser($user);
+
         if ($request->wantsJson()) {
             $freshPlan = $futurePlan->fresh(['rootItems.allChildren', 'items']);
             return response()->json([
@@ -304,7 +493,8 @@ class FuturePlanController extends Controller
      */
     public function reparentItem(Request $request, FuturePlan $futurePlan, FuturePlanItem $item): JsonResponse
     {
-        abort_if($futurePlan->user_id !== auth()->id() || $item->future_plan_id !== $futurePlan->id, 403, 'Akses ditolak.');
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user) && $item->future_plan_id === $futurePlan->id, 403, 'Akses ditolak.');
 
         $validated = $request->validate([
             'parent_id' => 'nullable|integer|exists:future_plan_items,id',
@@ -333,6 +523,7 @@ class FuturePlanController extends Controller
         }
 
         $item->update(['parent_id' => $newParentId]);
+        $futurePlan->touchActiveUser($user);
 
         $freshPlan = $futurePlan->fresh(['rootItems.allChildren', 'items']);
 
@@ -352,10 +543,13 @@ class FuturePlanController extends Controller
      */
     public function toggleItem(Request $request, FuturePlan $futurePlan, FuturePlanItem $item): RedirectResponse|JsonResponse
     {
-        abort_if($futurePlan->user_id !== auth()->id() || $item->future_plan_id !== $futurePlan->id, 403, 'Akses ditolak.');
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user) && $item->future_plan_id === $futurePlan->id, 403, 'Akses ditolak.');
 
         $item->is_completed = !$item->is_completed;
         $item->save();
+
+        $futurePlan->touchActiveUser($user);
 
         if ($request->wantsJson() || $request->ajax()) {
             $freshPlan = $futurePlan->fresh(['rootItems.allChildren', 'items']);
@@ -380,10 +574,13 @@ class FuturePlanController extends Controller
      */
     public function destroyItem(FuturePlan $futurePlan, FuturePlanItem $item): RedirectResponse|JsonResponse
     {
-        abort_if($futurePlan->user_id !== auth()->id() || $item->future_plan_id !== $futurePlan->id, 403, 'Akses ditolak.');
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user) && $item->future_plan_id === $futurePlan->id, 403, 'Akses ditolak.');
 
         $title = $item->title;
         $item->delete();
+
+        $futurePlan->touchActiveUser($user);
 
         if (request()->wantsJson()) {
             return response()->json([
