@@ -1,7 +1,41 @@
 import re
 import sys
-import pymupdf4llm
 from .base_parser import BaseBankParser, clean_text, clean_amount
+
+def to_markdown_compat(doc, page_number: int) -> str:
+    """
+    Ekstrak halaman PDF ke format Markdown dengan kompatibilitas:
+    1. PyMuPDF 2.0+ native (doc.to_markdown)
+    2. pymupdf4llm standalone (< 2.0.0)
+    3. pymupdf.to_markdown
+    4. Fallback plain text jika tidak tersedia
+    """
+    if hasattr(doc, "to_markdown"):
+        try:
+            return doc.to_markdown(pages=[page_number])
+        except Exception:
+            pass
+
+    try:
+        import pymupdf4llm
+        if hasattr(pymupdf4llm, "to_markdown"):
+            return pymupdf4llm.to_markdown(doc, pages=[page_number])
+    except ImportError:
+        pass
+
+    try:
+        import pymupdf
+        if hasattr(pymupdf, "to_markdown"):
+            return pymupdf.to_markdown(doc, pages=[page_number])
+    except ImportError:
+        pass
+
+    try:
+        page = doc[page_number] if isinstance(page_number, int) and page_number < len(doc) else doc[0]
+        return page.get_text("text")
+    except Exception as e:
+        print(f"Peringatan: Gagal mengekstrak teks halaman {page_number}: {e}", file=sys.stderr)
+        return ""
 
 def split_row(line):
     return [c.strip() for c in line.strip("|").split("|")]
@@ -22,7 +56,7 @@ class MandiriParser(BaseBankParser):
 
         # 1. Coba ekstraksi tabel markdown
         for i, page in enumerate(doc, start=1):
-            md = pymupdf4llm.to_markdown(doc, pages=[page.number])
+            md = to_markdown_compat(doc, page.number)
             table_blocks = re.findall(r"((?:^\|.*\|\s*$\n?)+)", md, re.MULTILINE)
 
             for block in table_blocks:

@@ -1,13 +1,31 @@
+import sys
 from .base_parser import BaseBankParser
-from .jago_parser import JagoParser
-from .bca_parser import BcaParser
-from .mandiri_parser import MandiriParser
 
-REGISTRY: dict[str, BaseBankParser] = {
-    "jago": JagoParser(),
-    "bca": BcaParser(),
-    "mandiri": MandiriParser(),
-}
+REGISTRY: dict[str, BaseBankParser] = {}
+
+try:
+    from .jago_parser import JagoParser
+    REGISTRY["jago"] = JagoParser()
+except Exception as e:
+    sys.stderr.write(f"Peringatan: JagoParser gagal dimuat: {e}\n")
+
+try:
+    from .bca_parser import BcaParser
+    REGISTRY["bca"] = BcaParser()
+except Exception as e:
+    sys.stderr.write(f"Peringatan: BcaParser gagal dimuat: {e}\n")
+
+try:
+    from .mandiri_parser import MandiriParser
+    REGISTRY["mandiri"] = MandiriParser()
+except Exception as e:
+    sys.stderr.write(f"Peringatan: MandiriParser gagal dimuat: {e}\n")
+
+try:
+    from .bri_parser import BriParser
+    REGISTRY["bri"] = BriParser()
+except Exception as e:
+    sys.stderr.write(f"Peringatan: BriParser gagal dimuat: {e}\n")
 
 def resolve_parser(bank_code: str = "auto", first_page_text: str = "") -> BaseBankParser:
     """
@@ -24,6 +42,9 @@ def resolve_parser(bank_code: str = "auto", first_page_text: str = "") -> BaseBa
         "014": "bca",
         "mandiri": "mandiri",
         "008": "mandiri",
+        "bri": "bri",
+        "002": "bri",
+        "brimo": "bri",
     }
 
     resolved_code = alias_map.get(code)
@@ -36,5 +57,10 @@ def resolve_parser(bank_code: str = "auto", first_page_text: str = "") -> BaseBa
             if parser.can_handle(first_page_text):
                 return parser
 
-    # 3. Default fallback ke JagoParser
-    return REGISTRY["jago"]
+    # 3. Default fallback ke JagoParser atau parser pertama yang tersedia
+    if "jago" in REGISTRY:
+        return REGISTRY["jago"]
+    if REGISTRY:
+        return next(iter(REGISTRY.values()))
+    
+    return BaseBankParser()
