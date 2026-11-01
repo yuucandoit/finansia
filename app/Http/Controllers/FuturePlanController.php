@@ -376,7 +376,6 @@ class FuturePlanController extends Controller
         ], [
             'title.required' => 'Nama item wajib diisi.',
             'quantity.min'   => 'Jumlah minimal 1.',
-            'unit_price.min' => 'Harga tidak boleh negatif.',
         ]);
 
         if (!empty($validated['parent_id'])) {
@@ -437,7 +436,7 @@ class FuturePlanController extends Controller
             'parent_id'    => 'nullable|integer|exists:future_plan_items,id',
             'title'        => 'required|string|max:255',
             'quantity'     => 'nullable|integer|min:1',
-            'unit_price'   => 'nullable|numeric|min:0',
+            'unit_price'   => 'nullable|numeric',
             'notes'        => 'nullable|string',
             'is_completed' => 'nullable|boolean',
         ]);
