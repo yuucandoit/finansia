@@ -22,6 +22,8 @@ class FuturePlanItem extends Model
         'unit_price',
         'is_completed',
         'notes',
+        'start_date',
+        'end_date',
         'order',
     ];
 
@@ -32,6 +34,8 @@ class FuturePlanItem extends Model
         'order'          => 'integer',
         'parent_id'      => 'integer',
         'future_plan_id' => 'integer',
+        'start_date'     => 'date:Y-m-d',
+        'end_date'       => 'date:Y-m-d',
     ];
 
     public function futurePlan(): BelongsTo
@@ -87,41 +91,191 @@ class FuturePlanItem extends Model
     }
 
     /**
-     * Rollup total efektif ala Excel WBS:
-     * Jika memiliki sub-items, akumulasikan subtotal anak-anaknya (+ harga item ini jika ada).
-     * Jika item daun (leaf), nilainya adalah Qty * Unit Price item ini sendiri.
+     * Ambil anak langsung, memakai relasi yang sudah di-load bila tersedia.
      */
-    public function getEffectiveSubtotalAttribute(): float
+    protected function loadedChildren(): Collection
     {
-        $children = $this->relationLoaded('allChildren')
-            ? $this->allChildren
-            : ($this->relationLoaded('children') ? $this->children : $this->children()->get());
-
-        if ($children->isNotEmpty()) {
-            $childrenTotal = (float) $children->sum(fn ($c) => $c->effective_subtotal);
-            $ownTotal = $this->subtotal;
-            return $ownTotal > 0 ? $ownTotal + $childrenTotal : $childrenTotal;
+        if ($this->relationLoaded('allChildren')) {
+            return $this->allChildren;
         }
 
-        return $this->subtotal;
+        if ($this->relationLoaded('children')) {
+            return $this->children;
+        }
+
+        return $this->children()->get();
     }
 
     /**
-     * Subtotal yang sudah berstatus selesai/terbeli.
+     * Item induk yang punya harga sendiri dan punya anak.
+     * Harga induk diperlakukan sebagai Target / Plafon, bukan biaya tambahan.
+     */
+    public function getIsTargetAttribute(): bool
+    {
+        return $this->subtotal > 0 && $this->loadedChildren()->isNotEmpty();
+    }
+
+    /**
+     * Total estimasi seluruh anak langsung (rekursif).
+     */
+    public function getChildrenTotalAttribute(): float
+    {
+        return (float) $this->loadedChildren()->sum(fn ($c) => $c->effective_subtotal);
+    }
+
+    /**
+     * Total anak yang sudah terbeli (rekursif).
+     */
+    public function getChildrenCompletedTotalAttribute(): float
+    {
+        return (float) $this->loadedChildren()->sum(fn ($c) => $c->effective_completed_subtotal);
+    }
+
+    /**
+     * Selisih rincian anak yang melebihi target induk (0 jika tidak over budget).
+     */
+    public function getOverBudgetAmountAttribute(): float
+    {
+        if (!$this->is_target) {
+            return 0.0;
+        }
+
+        return max(0.0, $this->children_total - $this->subtotal);
+    }
+
+    /**
+     * Total kebutuhan efektif:
+     * - Item tunggal  : qty x harga.
+     * - Grup          : jumlah seluruh anak.
+     * - Target/Plafon : nilai terbesar antara target induk dan total rincian anak.
+     */
+    public function getEffectiveSubtotalAttribute(): float
+    {
+        $children = $this->loadedChildren();
+
+        if ($children->isEmpty()) {
+            return $this->subtotal;
+        }
+
+        $childrenTotal = (float) $children->sum(fn ($c) => $c->effective_subtotal);
+
+        if ($this->subtotal > 0) {
+            return max($this->subtotal, $childrenTotal);
+        }
+
+        return $childrenTotal;
+    }
+
+    /**
+     * Total yang sudah terbeli/terpenuhi:
+     * - Item tunggal : qty x harga jika dicentang.
+     * - Induk dicentang : dianggap terpenuhi penuh sebesar kebutuhan efektif.
+     * - Induk belum dicentang : jumlah anak yang terbeli, maksimal sebesar kebutuhan efektif.
      */
     public function getEffectiveCompletedSubtotalAttribute(): float
     {
-        $children = $this->relationLoaded('allChildren')
-            ? $this->allChildren
-            : ($this->relationLoaded('children') ? $this->children : $this->children()->get());
+        $children = $this->loadedChildren();
 
-        if ($children->isNotEmpty()) {
-            $childrenTotal = (float) $children->sum(fn ($c) => $c->effective_completed_subtotal);
-            $ownTotal = $this->is_completed ? $this->subtotal : 0.0;
-            return $ownTotal + $childrenTotal;
+        if ($children->isEmpty()) {
+            return $this->is_completed ? $this->subtotal : 0.0;
         }
 
-        return $this->is_completed ? $this->subtotal : 0.0;
+        $effective = $this->effective_subtotal;
+
+        if ($this->is_completed) {
+            return $effective;
+        }
+
+        $childrenCompleted = (float) $children->sum(fn ($c) => $c->effective_completed_subtotal);
+
+        return min($effective, $childrenCompleted);
+    }
+
+    /**
+     * Tanggal mulai efektif: memakai start_date item ini, atau nilai terawal dari anak-anaknya.
+     */
+    public function getEffectiveStartDateAttribute(): ?string
+    {
+        if ($this->start_date) {
+            return $this->start_date instanceof \Carbon\CarbonInterface
+                ? $this->start_date->format('Y-m-d')
+                : (string) $this->start_date;
+        }
+
+        $children = $this->loadedChildren();
+        if ($children->isNotEmpty()) {
+            $childDates = $children->map(fn ($c) => $c->effective_start_date)->filter()->sort()->values();
+            return $childDates->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * Tanggal selesai efektif: memakai end_date item ini, atau nilai terakhir dari anak-anaknya.
+     */
+    public function getEffectiveEndDateAttribute(): ?string
+    {
+        if ($this->end_date) {
+            return $this->end_date instanceof \Carbon\CarbonInterface
+                ? $this->end_date->format('Y-m-d')
+                : (string) $this->end_date;
+        }
+
+        $children = $this->loadedChildren();
+        if ($children->isNotEmpty()) {
+            $childDates = $children->map(fn ($c) => $c->effective_end_date)->filter()->sort()->values();
+            return $childDates->last();
+        }
+
+        return null;
+    }
+
+    /**
+     * Durasi dalam hari antara tanggal mulai dan selesai.
+     */
+    public function getDurationDaysAttribute(): ?int
+    {
+        $start = $this->effective_start_date;
+        $end = $this->effective_end_date;
+
+        if (!$start || !$end) {
+            return null;
+        }
+
+        $s = \Carbon\Carbon::parse($start)->startOfDay();
+        $e = \Carbon\Carbon::parse($end)->startOfDay();
+
+        return max(1, (int) $s->diffInDays($e) + 1);
+    }
+
+    /**
+     * Status linimasa: completed, in_progress, upcoming, overdue, no_dates.
+     */
+    public function getTimelineStatusAttribute(): string
+    {
+        if ($this->is_completed) {
+            return 'completed';
+        }
+
+        $start = $this->effective_start_date;
+        $end = $this->effective_end_date;
+
+        if (!$start && !$end) {
+            return 'no_dates';
+        }
+
+        $today = now()->format('Y-m-d');
+
+        if ($end && $end < $today) {
+            return 'overdue';
+        }
+
+        if ($start && $start <= $today && (!$end || $end >= $today)) {
+            return 'in_progress';
+        }
+
+        return 'upcoming';
     }
 
     /**

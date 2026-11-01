@@ -21,6 +21,7 @@ class FuturePlan extends Model
         'user_id',
         'title',
         'description',
+        'start_date',
         'target_date',
         'status',
         'color',
@@ -28,6 +29,7 @@ class FuturePlan extends Model
     ];
 
     protected $casts = [
+        'start_date'  => 'date',
         'target_date' => 'date',
         'user_id'     => 'integer',
     ];

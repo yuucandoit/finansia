@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\FuturePlan;
 use App\Models\FuturePlanItem;
 use App\Models\User;
+use App\Services\FuturePlanSpreadsheetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FuturePlanController extends Controller
 {
@@ -372,10 +374,13 @@ class FuturePlanController extends Controller
             'quantity'     => 'nullable|integer|min:1',
             'unit_price'   => 'nullable|numeric',
             'notes'        => 'nullable|string',
+            'start_date'   => 'nullable|date',
+            'end_date'     => 'nullable|date|after_or_equal:start_date',
             'is_completed' => 'nullable|boolean',
         ], [
-            'title.required' => 'Nama item wajib diisi.',
-            'quantity.min'   => 'Jumlah minimal 1.',
+            'title.required'          => 'Nama item wajib diisi.',
+            'quantity.min'            => 'Jumlah minimal 1.',
+            'end_date.after_or_equal' => 'Tanggal selesai harus sama atau setelah tanggal mulai.',
         ]);
 
         if (!empty($validated['parent_id'])) {
@@ -399,6 +404,8 @@ class FuturePlanController extends Controller
             'quantity'       => max(1, (int) ($validated['quantity'] ?? 1)),
             'unit_price'     => (float) ($validated['unit_price'] ?? 0),
             'notes'          => $validated['notes'] ?? null,
+            'start_date'     => $validated['start_date'] ?? null,
+            'end_date'       => $validated['end_date'] ?? null,
             'is_completed'   => (bool) ($validated['is_completed'] ?? false),
             'order'          => $nextOrder,
         ]);
@@ -438,7 +445,11 @@ class FuturePlanController extends Controller
             'quantity'     => 'nullable|integer|min:1',
             'unit_price'   => 'nullable|numeric',
             'notes'        => 'nullable|string',
+            'start_date'   => 'nullable|date',
+            'end_date'     => 'nullable|date|after_or_equal:start_date',
             'is_completed' => 'nullable|boolean',
+        ], [
+            'end_date.after_or_equal' => 'Tanggal selesai harus sama atau setelah tanggal mulai.',
         ]);
 
         // Pencegahan circular reference jika parent diubah
@@ -457,14 +468,23 @@ class FuturePlanController extends Controller
             }
         }
 
-        $item->update([
+        $updateData = [
             'parent_id'    => $newParentId,
             'title'        => trim($validated['title']),
             'quantity'     => max(1, (int) ($validated['quantity'] ?? $item->quantity)),
             'unit_price'   => (float) ($validated['unit_price'] ?? $item->unit_price),
             'notes'        => $validated['notes'] ?? null,
             'is_completed' => array_key_exists('is_completed', $validated) ? (bool) $validated['is_completed'] : $item->is_completed,
-        ]);
+        ];
+
+        if (array_key_exists('start_date', $validated)) {
+            $updateData['start_date'] = $validated['start_date'];
+        }
+        if (array_key_exists('end_date', $validated)) {
+            $updateData['end_date'] = $validated['end_date'];
+        }
+
+        $item->update($updateData);
 
         $futurePlan->touchActiveUser($user);
 
@@ -569,6 +589,39 @@ class FuturePlanController extends Controller
     }
 
     /**
+     * Memperbarui jadwal tanggal mulai dan tanggal selesai item langsung dari Gantt Chart (AJAX).
+     */
+    public function updateItemDates(Request $request, FuturePlan $futurePlan, FuturePlanItem $item): JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user) && $item->future_plan_id === $futurePlan->id, 403, 'Akses ditolak.');
+
+        $validated = $request->validate([
+            'start_date' => 'nullable|date',
+            'end_date'   => 'nullable|date|after_or_equal:start_date',
+        ], [
+            'end_date.after_or_equal' => 'Tanggal selesai harus sama atau setelah tanggal mulai.',
+        ]);
+
+        $item->update([
+            'start_date' => $validated['start_date'] ?? null,
+            'end_date'   => $validated['end_date'] ?? null,
+        ]);
+
+        $futurePlan->touchActiveUser($user);
+
+        return response()->json([
+            'success'              => true,
+            'message'              => 'Jadwal tanggal item berhasil diperbarui.',
+            'item'                 => $item->fresh(),
+            'effective_start_date' => $item->effective_start_date,
+            'effective_end_date'   => $item->effective_end_date,
+            'duration_days'        => $item->duration_days,
+            'timeline_status'      => $item->timeline_status,
+        ]);
+    }
+
+    /**
      * Menghapus Item beserta sub-item di bawahnya.
      */
     public function destroyItem(FuturePlan $futurePlan, FuturePlanItem $item): RedirectResponse|JsonResponse
@@ -609,5 +662,111 @@ class FuturePlanController extends Controller
         }
 
         return false;
+    }
+
+    /**
+     * Unduh file ekspor seluruh rincian item Future Plan (Excel .xlsx atau .csv).
+     */
+    public function export(Request $request, FuturePlan $futurePlan, FuturePlanSpreadsheetService $spreadsheetService): StreamedResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak. Anda tidak memiliki izin untuk mengekspor rencana ini.');
+
+        $format = strtolower($request->query('format', 'xlsx'));
+
+        if ($format === 'csv') {
+            return $spreadsheetService->exportCsv($futurePlan);
+        }
+
+        return $spreadsheetService->exportXlsx($futurePlan);
+    }
+
+    /**
+     * Unduh berkas template spreadsheet (.xlsx atau .csv) untuk format impor item Future Plan.
+     */
+    public function exportTemplate(Request $request, FuturePlanSpreadsheetService $spreadsheetService): StreamedResponse
+    {
+        $format = strtolower($request->query('format', 'xlsx'));
+
+        if ($format === 'csv') {
+            return $spreadsheetService->exportTemplateCsv();
+        }
+
+        return $spreadsheetService->exportTemplateXlsx();
+    }
+
+    /**
+     * Impor data item ke dalam Future Plan dari berkas Excel (.xlsx) atau CSV.
+     */
+    public function import(Request $request, FuturePlan $futurePlan, FuturePlanSpreadsheetService $spreadsheetService): RedirectResponse|JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak. Anda tidak memiliki izin untuk mengimpor data ke rencana ini.');
+
+        $request->validate([
+            'file' => 'required|file|max:10240',
+            'mode' => 'nullable|in:append,replace',
+        ], [
+            'file.required' => 'Silakan pilih berkas spreadsheet (.xlsx atau .csv) untuk diimpor.',
+            'file.max'      => 'Ukuran berkas maksimal adalah 10 MB.',
+        ]);
+
+        $file = $request->file('file');
+        $extension = strtolower($file->getClientOriginalExtension());
+
+        if (!in_array($extension, ['xlsx', 'xls', 'csv', 'txt'])) {
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Format berkas harus berupa .xlsx atau .csv.',
+                ], 422);
+            }
+
+            return back()->with('error', 'Format berkas harus berupa .xlsx atau .csv.');
+        }
+
+        try {
+            $mode = $request->input('mode', 'append');
+            $summary = $spreadsheetService->import($file, $futurePlan, $mode);
+
+            $futurePlan->touchActiveUser($user);
+
+            $successMsg = sprintf(
+                'Berhasil mengimpor %d item (%d item utama, %d sub-item) dengan mode %s!',
+                $summary['total_imported'],
+                $summary['root_items'],
+                $summary['child_items'],
+                $mode === 'replace' ? 'timpa (replace)' : 'tambah (append)'
+            );
+
+            if ($request->wantsJson() || $request->ajax()) {
+                $freshPlan = $futurePlan->fresh(['rootItems.allChildren', 'items']);
+                return response()->json([
+                    'success'             => true,
+                    'message'             => $successMsg,
+                    'summary'             => $summary,
+                    'total_estimated'     => $freshPlan->total_estimated_amount,
+                    'total_completed'     => $freshPlan->total_completed_amount,
+                    'total_remaining'     => $freshPlan->remaining_amount,
+                    'progress_percentage' => $freshPlan->progress_percentage,
+                ]);
+            }
+
+            return redirect()
+                ->route('future-planner.show', $futurePlan)
+                ->with('success', $successMsg);
+
+        } catch (\Throwable $e) {
+            \Log::error('Gagal impor future plan: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Gagal mengimpor berkas: ' . $e->getMessage(),
+                ], 422);
+            }
+
+            return back()->with('error', 'Gagal mengimpor berkas: ' . $e->getMessage());
+        }
     }
 }
