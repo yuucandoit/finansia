@@ -233,4 +233,93 @@ class FuturePlanTest extends TestCase
         $this->assertTrue($plan->hasAccess($member));
         $this->assertFalse($plan->hasAccess($outsider));
     }
+
+    protected function makeItem(FuturePlan $plan, string $title, float $price, int $qty = 1, ?int $parentId = null, bool $done = false): FuturePlanItem
+    {
+        return FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'parent_id'      => $parentId,
+            'title'          => $title,
+            'quantity'       => $qty,
+            'unit_price'     => $price,
+            'is_completed'   => $done,
+        ]);
+    }
+
+    protected function makePlan(string $title): FuturePlan
+    {
+        $user = User::factory()->create(['status' => 'approved']);
+
+        return FuturePlan::create(['user_id' => $user->id, 'title' => $title]);
+    }
+
+    public function test_target_with_installment_children_does_not_double_count(): void
+    {
+        $plan = $this->makePlan('Mahar');
+        $mahar = $this->makeItem($plan, 'Mahar', 0);
+        $emas25 = $this->makeItem($plan, 'Emas 25 Gram', 25000000, 1, $mahar->id);
+        $this->makeItem($plan, 'Emas 5 Gram', 5000000, 1, $emas25->id, true);
+
+        $emas25->refresh();
+        $this->assertTrue($emas25->is_target);
+        $this->assertEquals(25000000.0, $emas25->effective_subtotal);
+        $this->assertEquals(5000000.0, $emas25->effective_completed_subtotal);
+
+        $plan->refresh();
+        $this->assertEquals(25000000.0, $plan->total_estimated_amount);
+        $this->assertEquals(5000000.0, $plan->total_completed_amount);
+        $this->assertEquals(20000000.0, $plan->remaining_amount);
+        $this->assertEquals(20.0, $plan->progress_percentage);
+    }
+
+    public function test_completed_target_parent_counts_as_fully_fulfilled_once(): void
+    {
+        $plan = $this->makePlan('Mahar Lunas');
+        $emas25 = $this->makeItem($plan, 'Emas 25 Gram', 25000000, 1, null, true);
+        $this->makeItem($plan, 'Emas 5 Gram', 5000000, 1, $emas25->id, true);
+
+        $plan->refresh();
+        $this->assertEquals(25000000.0, $plan->total_estimated_amount);
+        $this->assertEquals(25000000.0, $plan->total_completed_amount);
+        $this->assertEquals(0.0, $plan->remaining_amount);
+        $this->assertEquals(100.0, $plan->progress_percentage);
+    }
+
+    public function test_budget_parent_uses_budget_when_breakdown_is_incomplete(): void
+    {
+        $plan = $this->makePlan('Setup PC');
+        $pc = $this->makeItem($plan, 'Setup PC', 20000000);
+        $this->makeItem($plan, 'CPU', 5000000, 1, $pc->id);
+
+        $pc->refresh();
+        $this->assertEquals(20000000.0, $pc->effective_subtotal);
+        $this->assertEquals(0.0, $pc->over_budget_amount);
+    }
+
+    public function test_budget_parent_flags_over_budget_when_breakdown_exceeds_target(): void
+    {
+        $plan = $this->makePlan('Setup PC Over');
+        $pc = $this->makeItem($plan, 'Setup PC', 20000000);
+        $this->makeItem($plan, 'CPU', 7000000, 1, $pc->id);
+        $this->makeItem($plan, 'GPU', 12000000, 1, $pc->id);
+        $this->makeItem($plan, 'RAM', 1500000, 2, $pc->id);
+
+        $pc->refresh();
+        $this->assertEquals(22000000.0, $pc->effective_subtotal);
+        $this->assertEquals(2000000.0, $pc->over_budget_amount);
+    }
+
+    public function test_group_parent_without_price_sums_children(): void
+    {
+        $plan = $this->makePlan('Motor');
+        $motor = $this->makeItem($plan, 'Motor', 0);
+        $this->makeItem($plan, 'Unit Motor', 25000000, 1, $motor->id, true);
+        $this->makeItem($plan, 'Helm', 500000, 1, $motor->id);
+        $this->makeItem($plan, 'Jaket', 500000, 1, $motor->id);
+
+        $motor->refresh();
+        $this->assertFalse($motor->is_target);
+        $this->assertEquals(26000000.0, $motor->effective_subtotal);
+        $this->assertEquals(25000000.0, $motor->effective_completed_subtotal);
+    }
 }

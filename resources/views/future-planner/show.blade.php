@@ -263,6 +263,8 @@
                                     $depth = $item->depth ?? 0;
                                     $hasChildren = $item->hasChildren();
                                     $subtotal = $item->effective_subtotal;
+                                    $isTarget = $hasChildren && $item->subtotal > 0;
+                                    $overBudget = $isTarget ? $item->over_budget_amount : 0;
                                     $isCompleted = $item->is_completed;
                                     // Ambil item sebelumnya untuk opsi quick indent
                                     $prevItem = $index > 0 ? $items[$index - 1] : null;
@@ -324,6 +326,11 @@
                                     <!-- Harga Satuan -->
                                     <td class="py-3 px-4 text-right text-gray-600 align-middle" id="price-item-{{ $item->id }}">
                                         Rp {{ number_format($item->unit_price, 0, ',', '.') }}
+                                        @if($isTarget)
+                                            <div class="text-[9px] font-semibold text-amber-700" title="Harga induk dipakai sebagai target/plafon, bukan biaya tambahan">
+                                                Target / Plafon
+                                            </div>
+                                        @endif
                                     </td>
 
                                     <!-- Total Subtotal (Rollup jika Parent) -->
@@ -331,7 +338,17 @@
                                         <div class="font-bold {{ $hasChildren ? 'text-indigo-700 text-sm' : 'text-gray-900' }}">
                                             Rp {{ number_format($subtotal, 0, ',', '.') }}
                                         </div>
-                                        @if($hasChildren)
+                                        @if($isTarget)
+                                            <div class="text-[10px] text-gray-500">
+                                                Terkumpul Rp {{ number_format($item->effective_completed_subtotal, 0, ',', '.') }}
+                                                dari Rp {{ number_format($subtotal, 0, ',', '.') }}
+                                            </div>
+                                            @if($overBudget > 0)
+                                                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-200" title="Total rincian melebihi target">
+                                                    Over budget Rp {{ number_format($overBudget, 0, ',', '.') }}
+                                                </span>
+                                            @endif
+                                        @elseif($hasChildren)
                                             <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-200">
                                                 Rollup Sub-item
                                             </span>
