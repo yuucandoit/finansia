@@ -156,6 +156,39 @@ class PdfImportTest extends TestCase
         $this->assertEquals(500000.0, $result['transactions'][1]['amount']);
     }
 
+    public function test_normalize_extracted_rows_handles_standard_contract_from_bri()
+    {
+        $service = app(PdfImportService::class);
+
+        $briRows = [
+            [
+                'date' => '2026-09-25',
+                'raw_date' => '25/09/2026',
+                'description' => 'TRSF E-BANKING CR 2509/WS95011 GAJI',
+                'type' => 'Cash In',
+                'amount' => 8500000.0,
+                'balance' => 10500000.0,
+            ],
+            [
+                'date' => '2026-09-26',
+                'raw_date' => '26/09/2026',
+                'description' => 'QRIS INDOMARET TANGSEL',
+                'type' => 'Cash Out',
+                'amount' => 45000.0,
+                'balance' => 10455000.0,
+            ]
+        ];
+
+        $result = $service->normalizeExtractedRows($briRows, $this->user->id);
+
+        $this->assertEquals(2, $result['total_items']);
+        $this->assertEquals(8500000.0, $result['total_cash_in']);
+        $this->assertEquals(45000.0, $result['total_cash_out']);
+        $this->assertEquals(10455000.0, $result['final_balance']);
+        $this->assertEquals('Cash In', $result['transactions'][0]['type']);
+        $this->assertEquals('Cash Out', $result['transactions'][1]['type']);
+    }
+
     public function test_save_imported_creates_transactions_and_updates_balance()
     {
         $service = app(PdfImportService::class);

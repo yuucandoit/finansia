@@ -1,7 +1,45 @@
 import re
 import sys
-import pymupdf4llm
 from .base_parser import BaseBankParser, clean_text, clean_amount
+
+def to_markdown_compat(doc, page_number: int) -> str:
+    """
+    Ekstrak halaman PDF ke format Markdown dengan kompatibilitas:
+    1. PyMuPDF 2.0+ native (doc.to_markdown)
+    2. pymupdf4llm standalone (< 2.0.0)
+    3. pymupdf.to_markdown
+    4. Fallback plain text jika tidak tersedia
+    """
+    # 1. Coba method bawaan doc.to_markdown (PyMuPDF 2.0+)
+    if hasattr(doc, "to_markdown"):
+        try:
+            return doc.to_markdown(pages=[page_number])
+        except Exception:
+            pass
+
+    # 2. Coba library standalone pymupdf4llm (versi < 2.0.0)
+    try:
+        import pymupdf4llm
+        if hasattr(pymupdf4llm, "to_markdown"):
+            return pymupdf4llm.to_markdown(doc, pages=[page_number])
+    except ImportError:
+        pass
+
+    # 3. Coba modul pymupdf.to_markdown
+    try:
+        import pymupdf
+        if hasattr(pymupdf, "to_markdown"):
+            return pymupdf.to_markdown(doc, pages=[page_number])
+    except ImportError:
+        pass
+
+    # 4. Fallback jika tidak ada to_markdown
+    try:
+        page = doc[page_number] if isinstance(page_number, int) and page_number < len(doc) else doc[0]
+        return page.get_text("text")
+    except Exception as e:
+        print(f"Peringatan: Gagal mengekstrak teks halaman {page_number}: {e}", file=sys.stderr)
+        return ""
 
 DATE_RE = re.compile(r"^\d{1,2}\s+\w+\s+\d{4}(\s*<br>\s*\d{1,2}:\d{2})?$")
 MONTH_RE = re.compile(r"^\*\*\w+\s+\d{4}\*\*$")
@@ -35,7 +73,7 @@ class JagoParser(BaseBankParser):
 
         all_rows = []
         for i, page in enumerate(doc, start=1):
-            md = pymupdf4llm.to_markdown(doc, pages=[page.number])
+            md = to_markdown_compat(doc, page.number)
 
             table_blocks = re.findall(r"((?:^\|.*\|\s*$\n?)+)", md, re.MULTILINE)
             for block in table_blocks:
