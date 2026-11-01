@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\FuturePlan;
 use App\Models\FuturePlanItem;
 use App\Models\User;
+use App\Services\FuturePlanSpreadsheetService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class FuturePlanTest extends TestCase
@@ -417,5 +419,411 @@ class FuturePlanTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('D'); // Huruf pertama dari "Dimas Pratama"
         $response->assertSee($plan->share_code);
+    }
+
+    public function test_user_can_export_plan_items_to_csv(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Rencana Pernikahan Adat',
+        ]);
+
+        $parent = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Mahar Pernikahan',
+            'quantity'       => 1,
+            'unit_price'     => 0,
+            'order'          => 1,
+        ]);
+
+        $child = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'parent_id'      => $parent->id,
+            'title'          => 'Emas Logam Mulia 25g',
+            'quantity'       => 1,
+            'unit_price'     => 30000000,
+            'order'          => 2,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('future-planner.export', [$plan, 'format' => 'csv']));
+
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+        
+        $content = $response->streamedContent();
+        $this->assertStringContainsString('Mahar Pernikahan', $content);
+        $this->assertStringContainsString('Emas Logam Mulia 25g', $content);
+        $this->assertStringContainsString('1.1', $content);
+    }
+
+    public function test_user_can_export_plan_items_to_xlsx(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Setup Studio Musik',
+        ]);
+
+        FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Audio Interface Focusrite',
+            'quantity'       => 1,
+            'unit_price'     => 2500000,
+            'order'          => 1,
+        ]);
+
+        $response = $this->actingAs($this->user)->get(route('future-planner.export', [$plan, 'format' => 'xlsx']));
+
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $content = $response->streamedContent();
+        $this->assertNotEmpty($content);
+        // Valid ZIP archive header starts with PK
+        $this->assertStringStartsWith("PK", $content);
+    }
+
+    public function test_user_can_download_import_template(): void
+    {
+        $responseCsv = $this->actingAs($this->user)->get(route('future-planner.export-template', ['format' => 'csv']));
+        $responseCsv->assertStatus(200);
+        $this->assertStringContainsString('Mahar Pernikahan', $responseCsv->streamedContent());
+
+        $responseXlsx = $this->actingAs($this->user)->get(route('future-planner.export-template', ['format' => 'xlsx']));
+        $responseXlsx->assertStatus(200);
+        $this->assertStringStartsWith("PK", $responseXlsx->streamedContent());
+    }
+
+    public function test_user_can_import_plan_items_from_csv(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Renovasi Rumah 2027',
+        ]);
+
+        $csvContent = "\xEF\xBB\xBFNo,Nama Item,Jumlah (Qty),Harga Satuan (Rp),Status Selesai,Catatan,Nama Induk\n"
+            . "1,Kamar Tidur Utama,1,0,Belum,Grup area master bedroom,\n"
+            . "1.1,Dipan Kayu Jati Minimalis,1,8500000,Sudah,Ukuran King 180x200,Kamar Tidur Utama\n"
+            . "1.2,Kasur Springbed Orthopedic,1,6000000,Belum,Garansi 15 tahun,Kamar Tidur Utama\n"
+            . "2,AC Inverter 1 PK,2,4500000,Belum,Daikin Flash Inverter,\n";
+
+        $file = UploadedFile::fake()->createWithContent('renovasi.csv', $csvContent);
+
+        $response = $this->actingAs($this->user)->post(route('future-planner.import', $plan), [
+            'file' => $file,
+            'mode' => 'append',
+        ]);
+
+        $response->assertRedirect(route('future-planner.show', $plan));
+        $response->assertSessionHas('success');
+
+        $this->assertDatabaseHas('future_plan_items', [
+            'future_plan_id' => $plan->id,
+            'title'          => 'Kamar Tidur Utama',
+            'parent_id'      => null,
+        ]);
+
+        $kamar = FuturePlanItem::where('future_plan_id', $plan->id)->where('title', 'Kamar Tidur Utama')->first();
+        $this->assertNotNull($kamar);
+
+        $dipan = FuturePlanItem::where('future_plan_id', $plan->id)->where('title', 'Dipan Kayu Jati Minimalis')->first();
+        $this->assertNotNull($dipan);
+        $this->assertEquals($kamar->id, $dipan->parent_id);
+        $this->assertTrue((bool) $dipan->is_completed);
+        $this->assertEquals(8500000, (float) $dipan->unit_price);
+
+        $kasur = FuturePlanItem::where('future_plan_id', $plan->id)->where('title', 'Kasur Springbed Orthopedic')->first();
+        $this->assertNotNull($kasur);
+        $this->assertEquals($kamar->id, $kasur->parent_id);
+
+        $ac = FuturePlanItem::where('future_plan_id', $plan->id)->where('title', 'AC Inverter 1 PK')->first();
+        $this->assertNotNull($ac);
+        $this->assertNull($ac->parent_id);
+        $this->assertEquals(2, $ac->quantity);
+    }
+
+    public function test_user_can_import_plan_items_with_replace_mode(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Trip Overland',
+        ]);
+
+        // Buat item lama
+        FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Item Lama Yang Akan Terhapus',
+            'quantity'       => 1,
+            'unit_price'     => 100000,
+        ]);
+
+        $csvContent = "No,Nama Item,Qty,Harga,Status\n"
+            . "1,Tenda Camping 4P,1,1200000,Belum\n";
+
+        $file = UploadedFile::fake()->createWithContent('trip.csv', $csvContent);
+
+        $response = $this->actingAs($this->user)->post(route('future-planner.import', $plan), [
+            'file' => $file,
+            'mode' => 'replace',
+        ]);
+
+        $response->assertRedirect(route('future-planner.show', $plan));
+
+        // Item lama harus sudah terhapus
+        $this->assertDatabaseMissing('future_plan_items', [
+            'title' => 'Item Lama Yang Akan Terhapus',
+        ]);
+
+        // Item baru tersimpan
+        $this->assertDatabaseHas('future_plan_items', [
+            'future_plan_id' => $plan->id,
+            'title'          => 'Tenda Camping 4P',
+        ]);
+    }
+
+    public function test_user_can_import_plan_items_from_xlsx(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Tabungan Qurban & Aqiqah',
+        ]);
+
+        $service = new FuturePlanSpreadsheetService();
+        $refMethodGen = new \ReflectionMethod($service, 'generateXlsxFile');
+        $refMethodGen->setAccessible(true);
+
+        $xlsxData = [
+            [
+                'no'           => '1',
+                'title'        => 'Kambing Qurban Tipe A',
+                'quantity'     => 1,
+                'unit_price'   => 3500000,
+                'total'        => 3500000,
+                'is_completed' => 'Belum',
+                'notes'        => 'Bobot 30-35 kg',
+                'parent_name'  => '',
+            ],
+            [
+                'no'           => '1.1',
+                'title'        => 'Biaya Operasional & Potong',
+                'quantity'     => 1,
+                'unit_price'   => 250000,
+                'total'        => 250000,
+                'is_completed' => 'Sudah',
+                'notes'        => 'Biaya jagal',
+                'parent_name'  => 'Kambing Qurban Tipe A',
+            ],
+        ];
+
+        $tempPath = $refMethodGen->invoke($service, $xlsxData, 'Qurban');
+        $file = new UploadedFile($tempPath, 'qurban.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+
+        $response = $this->actingAs($this->user)->post(route('future-planner.import', $plan), [
+            'file' => $file,
+            'mode' => 'append',
+        ]);
+
+        @unlink($tempPath);
+
+        $response->assertRedirect(route('future-planner.show', $plan));
+
+        $parent = FuturePlanItem::where('future_plan_id', $plan->id)->where('title', 'Kambing Qurban Tipe A')->first();
+        $this->assertNotNull($parent);
+
+        $child = FuturePlanItem::where('future_plan_id', $plan->id)->where('title', 'Biaya Operasional & Potong')->first();
+        $this->assertNotNull($child);
+        $this->assertEquals($parent->id, $child->parent_id);
+        $this->assertTrue((bool) $child->is_completed);
+    }
+
+    public function test_unauthorized_user_cannot_export_or_import_another_users_plan(): void
+    {
+        $otherUser = User::factory()->create(['status' => 'approved']);
+        $plan = FuturePlan::create([
+            'user_id' => $otherUser->id,
+            'title'   => 'Rencana Rahasia Lain',
+        ]);
+
+        // Attempt export
+        $exportResponse = $this->actingAs($this->user)->get(route('future-planner.export', $plan));
+        $exportResponse->assertStatus(403);
+
+        // Attempt import
+        $file = UploadedFile::fake()->createWithContent('test.csv', "Nama Item\nTest\n");
+        $importResponse = $this->actingAs($this->user)->post(route('future-planner.import', $plan), [
+            'file' => $file,
+        ]);
+        $importResponse->assertStatus(403);
+    }
+
+    public function test_import_rejects_invalid_file_format(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Test Validasi File',
+        ]);
+
+        $invalidFile = UploadedFile::fake()->create('malicious.php', 100);
+
+        $response = $this->actingAs($this->user)->post(route('future-planner.import', $plan), [
+            'file' => $invalidFile,
+        ]);
+
+        $response->assertSessionHas('error');
+    }
+
+    public function test_user_can_add_item_with_start_and_end_dates(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Proyek Liburan',
+        ]);
+
+        $response = $this->from(route('future-planner.show', $plan))
+            ->actingAs($this->user)
+            ->post(route('future-planner.items.store', $plan), [
+                'title'      => 'Booking Tiket Pesawat',
+                'quantity'   => 2,
+                'unit_price' => 1500000,
+                'start_date' => '2026-11-05',
+                'end_date'   => '2026-11-12',
+            ]);
+
+        $response->assertSessionHas('success');
+        $response->assertRedirect(route('future-planner.show', $plan));
+
+        $item = FuturePlanItem::where('future_plan_id', $plan->id)->where('title', 'Booking Tiket Pesawat')->first();
+        $this->assertNotNull($item);
+        $this->assertEquals('2026-11-05', $item->start_date->format('Y-m-d'));
+        $this->assertEquals('2026-11-12', $item->end_date->format('Y-m-d'));
+        $this->assertEquals(8, $item->duration_days);
+    }
+
+    public function test_user_can_update_item_dates_via_ajax(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Proyek Renovasi',
+        ]);
+
+        $item = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Beli Cat Dinding',
+            'quantity'       => 5,
+            'unit_price'     => 120000,
+            'order'          => 1,
+        ]);
+
+        $response = $this->actingAs($this->user)->patchJson(route('future-planner.items.dates', [$plan, $item]), [
+            'start_date' => '2026-11-10',
+            'end_date'   => '2026-11-15',
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'item'    => [
+                'id'         => $item->id,
+                'start_date' => '2026-11-10',
+                'end_date'   => '2026-11-15',
+            ],
+        ]);
+
+        $item->refresh();
+        $this->assertEquals('2026-11-10', $item->start_date->format('Y-m-d'));
+        $this->assertEquals('2026-11-15', $item->end_date->format('Y-m-d'));
+        $this->assertEquals(6, $item->duration_days);
+    }
+
+    public function test_update_item_dates_validates_end_date_after_or_equal_start_date(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Proyek Invalid Dates',
+        ]);
+
+        $item = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Item invalid dates',
+            'quantity'       => 1,
+            'unit_price'     => 100000,
+            'order'          => 1,
+        ]);
+
+        $response = $this->actingAs($this->user)->patchJson(route('future-planner.items.dates', [$plan, $item]), [
+            'start_date' => '2026-11-20',
+            'end_date'   => '2026-11-10',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['end_date']);
+    }
+
+    public function test_unauthorized_user_cannot_update_item_dates(): void
+    {
+        $otherUser = User::factory()->create(['status' => 'approved']);
+        $plan = FuturePlan::create([
+            'user_id' => $otherUser->id,
+            'title'   => 'Rencana Orang Lain',
+        ]);
+
+        $item = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Item Rahasia',
+            'quantity'       => 1,
+            'unit_price'     => 500000,
+            'order'          => 1,
+        ]);
+
+        $response = $this->actingAs($this->user)->patchJson(route('future-planner.items.dates', [$plan, $item]), [
+            'start_date' => '2026-11-10',
+            'end_date'   => '2026-11-15',
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_export_and_import_preserves_start_and_end_dates(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Rencana Linimasa',
+        ]);
+
+        $item = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Beli Komponen Hardware',
+            'quantity'       => 1,
+            'unit_price'     => 2000000,
+            'start_date'     => '2026-11-01',
+            'end_date'       => '2026-11-07',
+            'order'          => 1,
+        ]);
+
+        $exportResponse = $this->actingAs($this->user)->get(route('future-planner.export', [$plan, 'format' => 'csv']));
+        $exportResponse->assertStatus(200);
+
+        $csvContent = $exportResponse->streamedContent();
+        $this->assertStringContainsString('Tanggal Mulai', $csvContent);
+        $this->assertStringContainsString('Tanggal Selesai', $csvContent);
+        $this->assertStringContainsString('2026-11-01', $csvContent);
+        $this->assertStringContainsString('2026-11-07', $csvContent);
+
+        // Import into new plan
+        $plan2 = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Target Import Dates',
+        ]);
+
+        $file = UploadedFile::fake()->createWithContent('timeline.csv', $csvContent);
+        $importResponse = $this->actingAs($this->user)->post(route('future-planner.import', $plan2), [
+            'file' => $file,
+            'mode' => 'append',
+        ]);
+        $importResponse->assertRedirect(route('future-planner.show', $plan2));
+
+        $importedItem = FuturePlanItem::where('future_plan_id', $plan2->id)->where('title', 'Beli Komponen Hardware')->first();
+        $this->assertNotNull($importedItem);
+        $this->assertEquals('2026-11-01', $importedItem->start_date->format('Y-m-d'));
+        $this->assertEquals('2026-11-07', $importedItem->end_date->format('Y-m-d'));
     }
 }

@@ -49,10 +49,14 @@ Route::prefix('future-planner')->middleware(['auth', 'verified'])->group(functio
     Route::post('/store', [FuturePlanController::class, 'store'])->name('future-planner.store');
     Route::post('/join', [FuturePlanController::class, 'join'])->name('future-planner.join');
     Route::get('/join/{code?}', [FuturePlanController::class, 'showJoinForm'])->name('future-planner.join.form');
+    Route::get('/export-template', [FuturePlanController::class, 'exportTemplate'])->name('future-planner.export-template');
 
     Route::get('/{futurePlan}', [FuturePlanController::class, 'show'])->name('future-planner.show');
     Route::put('/{futurePlan}', [FuturePlanController::class, 'update'])->name('future-planner.update');
     Route::delete('/{futurePlan}', [FuturePlanController::class, 'destroy'])->name('future-planner.destroy');
+
+    Route::get('/{futurePlan}/export', [FuturePlanController::class, 'export'])->name('future-planner.export');
+    Route::post('/{futurePlan}/import', [FuturePlanController::class, 'import'])->name('future-planner.import');
 
     Route::post('/{futurePlan}/heartbeat', [FuturePlanController::class, 'heartbeat'])->name('future-planner.heartbeat');
     Route::post('/{futurePlan}/members', [FuturePlanController::class, 'addMember'])->name('future-planner.members.store');
@@ -62,6 +66,7 @@ Route::prefix('future-planner')->middleware(['auth', 'verified'])->group(functio
     Route::put('/{futurePlan}/items/{item}', [FuturePlanController::class, 'updateItem'])->name('future-planner.items.update');
     Route::patch('/{futurePlan}/items/{item}/reparent', [FuturePlanController::class, 'reparentItem'])->name('future-planner.items.reparent');
     Route::patch('/{futurePlan}/items/{item}/toggle', [FuturePlanController::class, 'toggleItem'])->name('future-planner.items.toggle');
+    Route::patch('/{futurePlan}/items/{item}/dates', [FuturePlanController::class, 'updateItemDates'])->name('future-planner.items.dates');
     Route::delete('/{futurePlan}/items/{item}', [FuturePlanController::class, 'destroyItem'])->name('future-planner.items.destroy');
 });
 

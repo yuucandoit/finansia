@@ -22,6 +22,8 @@ class FuturePlanItem extends Model
         'unit_price',
         'is_completed',
         'notes',
+        'start_date',
+        'end_date',
         'order',
     ];
 
@@ -32,6 +34,8 @@ class FuturePlanItem extends Model
         'order'          => 'integer',
         'parent_id'      => 'integer',
         'future_plan_id' => 'integer',
+        'start_date'     => 'date:Y-m-d',
+        'end_date'       => 'date:Y-m-d',
     ];
 
     public function futurePlan(): BelongsTo
@@ -185,6 +189,93 @@ class FuturePlanItem extends Model
         $childrenCompleted = (float) $children->sum(fn ($c) => $c->effective_completed_subtotal);
 
         return min($effective, $childrenCompleted);
+    }
+
+    /**
+     * Tanggal mulai efektif: memakai start_date item ini, atau nilai terawal dari anak-anaknya.
+     */
+    public function getEffectiveStartDateAttribute(): ?string
+    {
+        if ($this->start_date) {
+            return $this->start_date instanceof \Carbon\CarbonInterface
+                ? $this->start_date->format('Y-m-d')
+                : (string) $this->start_date;
+        }
+
+        $children = $this->loadedChildren();
+        if ($children->isNotEmpty()) {
+            $childDates = $children->map(fn ($c) => $c->effective_start_date)->filter()->sort()->values();
+            return $childDates->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * Tanggal selesai efektif: memakai end_date item ini, atau nilai terakhir dari anak-anaknya.
+     */
+    public function getEffectiveEndDateAttribute(): ?string
+    {
+        if ($this->end_date) {
+            return $this->end_date instanceof \Carbon\CarbonInterface
+                ? $this->end_date->format('Y-m-d')
+                : (string) $this->end_date;
+        }
+
+        $children = $this->loadedChildren();
+        if ($children->isNotEmpty()) {
+            $childDates = $children->map(fn ($c) => $c->effective_end_date)->filter()->sort()->values();
+            return $childDates->last();
+        }
+
+        return null;
+    }
+
+    /**
+     * Durasi dalam hari antara tanggal mulai dan selesai.
+     */
+    public function getDurationDaysAttribute(): ?int
+    {
+        $start = $this->effective_start_date;
+        $end = $this->effective_end_date;
+
+        if (!$start || !$end) {
+            return null;
+        }
+
+        $s = \Carbon\Carbon::parse($start)->startOfDay();
+        $e = \Carbon\Carbon::parse($end)->startOfDay();
+
+        return max(1, (int) $s->diffInDays($e) + 1);
+    }
+
+    /**
+     * Status linimasa: completed, in_progress, upcoming, overdue, no_dates.
+     */
+    public function getTimelineStatusAttribute(): string
+    {
+        if ($this->is_completed) {
+            return 'completed';
+        }
+
+        $start = $this->effective_start_date;
+        $end = $this->effective_end_date;
+
+        if (!$start && !$end) {
+            return 'no_dates';
+        }
+
+        $today = now()->format('Y-m-d');
+
+        if ($end && $end < $today) {
+            return 'overdue';
+        }
+
+        if ($start && $start <= $today && (!$end || $end >= $today)) {
+            return 'in_progress';
+        }
+
+        return 'upcoming';
     }
 
     /**
