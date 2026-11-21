@@ -238,7 +238,208 @@
                 </div>
             </div>
 
+            <!-- SINKING FUND / REKENING TERHUBUNG -->
+            <div class="bg-white rounded-2xl border border-indigo-100 shadow-2xs p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                @if($futurePlan->savingAccount)
+                    @php
+                        $linkedSaving = $futurePlan->savingAccount;
+                        $readinessPct = $futurePlan->fund_readiness_percentage;
+                        $shortfall = $futurePlan->fund_shortfall;
+                    @endphp
+                    <div class="flex items-start sm:items-center gap-3.5 flex-1">
+                        <div class="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl shrink-0 border border-indigo-100">
+                            🏦
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-xs font-bold uppercase tracking-wider text-indigo-700">Rekening Dana Rencana (Sinking Fund)</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold {{ $shortfall <= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800' }}">
+                                    {{ $shortfall <= 0 ? 'Dana Mencukupi!' : 'Kesiapan ' . $readinessPct . '%' }}
+                                </span>
+                            </div>
+                            <p class="text-sm font-bold text-gray-900 mt-0.5">
+                                {{ $linkedSaving->name }}
+                                <span class="text-xs font-normal text-gray-500">({{ $linkedSaving->bank->name ?? 'Bank' }})</span>
+                                — Saldo: <span class="text-indigo-700">Rp {{ number_format($linkedSaving->current_balance, 0, ',', '.') }}</span>
+                            </p>
+                            <div class="w-full max-w-md bg-gray-100 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div class="h-1.5 rounded-full {{ $shortfall <= 0 ? 'bg-emerald-500' : 'bg-indigo-600' }}" style="width: {{ min(100, $readinessPct) }}%"></div>
+                            </div>
+                            @if($shortfall > 0)
+                                <p class="text-[11px] text-amber-700 mt-1 font-medium">
+                                    Masih perlu menabung <strong>Rp {{ number_format($shortfall, 0, ',', '.') }}</strong> lagi untuk menutup sisa kebutuhan rencana.
+                                </p>
+                            @endif
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <a href="{{ route('saving.detail', $linkedSaving->id) }}" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition">
+                            Lihat Rekening
+                        </a>
+                        <button type="button" onclick="openLinkSavingModal()" class="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold transition">
+                            Ganti Rekening
+                        </button>
+                    </div>
+                @else
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gray-100 text-gray-500 flex items-center justify-center text-lg shrink-0">
+                            🏦
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-gray-800">Hubungkan Rekening Tabungan (Sinking Fund)</p>
+                            <p class="text-xs text-gray-500">Pantau kesiapan saldo rekening Anda terhadap sisa kebutuhan dana rencana ini.</p>
+                        </div>
+                    </div>
+                    <button type="button" onclick="openLinkSavingModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition shrink-0">
+                        + Hubungkan Rekening
+                    </button>
+                @endif
+            </div>
+
+            <!-- ALERT OVERDUE & TENGGAT DEKAT GANTT CHART -->
+            @if(($overdueItems ?? collect())->isNotEmpty() || ($dueSoonItems ?? collect())->isNotEmpty())
+                <div class="space-y-2.5">
+                    @if(($overdueItems ?? collect())->isNotEmpty())
+                        <div class="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 shadow-2xs">
+                            <span class="text-lg shrink-0">⏰</span>
+                            <div class="flex-1 text-xs text-rose-900">
+                                <p class="font-bold">Perhatian: {{ $overdueItems->count() }} item melewati batas waktu (Overdue)!</p>
+                                <p class="text-rose-700 mt-0.5">
+                                    {{ $overdueItems->take(4)->pluck('title')->implode(', ') }}{{ $overdueItems->count() > 4 ? ' dan lainnya' : '' }}.
+                                </p>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if(($dueSoonItems ?? collect())->isNotEmpty())
+                        <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 shadow-2xs">
+                            <span class="text-lg shrink-0">🔔</span>
+                            <div class="flex-1 text-xs text-amber-900">
+                                <p class="font-bold">Tenggat Waktu Dekat: {{ $dueSoonItems->count() }} item jatuh tempo ≤ 3 hari ke depan.</p>
+                                <p class="text-amber-700 mt-0.5">
+                                    {{ $dueSoonItems->take(4)->pluck('title')->implode(', ') }}{{ $dueSoonItems->count() > 4 ? ' dan lainnya' : '' }}.
+                                </p>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            <!-- PANEL KONTRIBUSI DANA ANGGOTA (KOLABORASI) -->
+            <div class="bg-white rounded-2xl border border-gray-100 shadow-2xs p-4 sm:p-5 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2">
+                            <span>🤝 Kontribusi Dana Bersama</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Terkumpul: Rp {{ number_format($totalContributions ?? 0, 0, ',', '.') }}
+                            </span>
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-0.5">Catat setoran dana dari masing-masing anggota untuk memantau porsi kontribusi rencana ini.</p>
+                    </div>
+                    <button type="button" onclick="openContributionModal()"
+                            class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition shrink-0">
+                        + Catat Setoran Dana
+                    </button>
+                </div>
+
+                @if(($memberContributions ?? collect())->isNotEmpty())
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        @foreach($memberContributions as $mc)
+                            <div class="p-3 rounded-xl bg-gray-50/70 border border-gray-100">
+                                <div class="flex items-center justify-between gap-2">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="w-7 h-7 rounded-full bg-indigo-600 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                                            {{ strtoupper(mb_substr($mc['user']->name, 0, 1)) }}
+                                        </span>
+                                        <span class="text-xs font-bold text-gray-800 truncate">{{ $mc['user']->name }}</span>
+                                    </div>
+                                    <span class="text-xs font-extrabold text-emerald-700 shrink-0">
+                                        Rp {{ number_format($mc['total'], 0, ',', '.') }}
+                                    </span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden">
+                                    <div class="bg-emerald-500 h-1.5 rounded-full" style="width: {{ min(100, $mc['share_of_estimated']) }}%"></div>
+                                </div>
+                                <p class="text-[10px] text-gray-500 mt-1">
+                                    {{ $mc['share_of_contrib'] }}% dari total setoran • {{ $mc['share_of_estimated'] }}% dari target rencana
+                                </p>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+
+                @if(($contributions ?? collect())->isNotEmpty())
+                    <details class="text-xs">
+                        <summary class="cursor-pointer font-semibold text-indigo-600 hover:text-indigo-800 select-none">
+                            Lihat Riwayat Setoran ({{ $contributions->count() }})
+                        </summary>
+                        <div class="mt-2.5 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                            @foreach($contributions as $contrib)
+                                <div class="flex items-center justify-between gap-2 p-2 rounded-xl bg-gray-50 border border-gray-100">
+                                    <div class="min-w-0">
+                                        <span class="font-bold text-gray-800">{{ $contrib->user->name ?? 'Anggota' }}</span>
+                                        <span class="text-gray-400">• {{ \Carbon\Carbon::parse($contrib->contributed_at)->format('d M Y') }}</span>
+                                        @if($contrib->notes)
+                                            <span class="text-gray-500 italic">— {{ $contrib->notes }}</span>
+                                        @endif
+                                    </div>
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="font-bold text-emerald-700">+ Rp {{ number_format($contrib->amount, 0, ',', '.') }}</span>
+                                        @if($isOwner || (int)$contrib->user_id === (int)auth()->id())
+                                            <form action="{{ route('future-planner.contributions.destroy', [$futurePlan, $contrib]) }}" method="POST" onsubmit="return confirm('Hapus catatan setoran ini?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="text-rose-500 hover:text-rose-700 font-bold px-1" title="Hapus">✕</button>
+                                            </form>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </details>
+                @endif
+            </div>
+
+            <!-- RIWAYAT AKTIVITAS KOLABORASI -->
+            <details class="bg-white rounded-2xl border border-gray-100 shadow-2xs p-4 sm:p-5">
+                <summary class="flex items-center justify-between cursor-pointer list-none">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold text-gray-800">📜 Riwayat Aktivitas Kolaborasi ({{ ($activities ?? collect())->count() }})</span>
+                        <span class="text-[11px] text-gray-400">Catatan perubahan item, jadwal & kontribusi</span>
+                    </div>
+                    <span class="text-xs font-semibold text-indigo-600">Lihat / Tutup</span>
+                </summary>
+                <div class="mt-3 pt-3 border-t border-gray-100 space-y-2 max-h-60 overflow-y-auto">
+                    @forelse(($activities ?? collect()) as $act)
+                        <div class="flex items-center justify-between gap-2 text-xs py-1.5 px-2.5 rounded-xl bg-gray-50/70">
+                            <div class="min-w-0">
+                                <span class="font-bold text-gray-800">{{ $act->user?->name ?? 'Sistem' }}</span>
+                                <span class="text-gray-600"> — {{ $act->description }}</span>
+                            </div>
+                            <span class="text-[11px] text-gray-400 shrink-0">{{ $act->created_at->diffForHumans() }}</span>
+                        </div>
+                    @empty
+                        <p class="text-xs text-gray-400 text-center py-3">Belum ada aktivitas tercatat.</p>
+                    @endforelse
+                </div>
+            </details>
+
             <!-- VIEW MODE SELECTOR: TABEL / SPREADSHEET vs GANTT CHART (TIMELINE) -->
+            <script>
+                window.switchViewMode = window.switchViewMode || function(mode) {
+                    const tableContainer = document.getElementById('tableViewContainer');
+                    const ganttContainer = document.getElementById('ganttViewContainer');
+                    if (mode === 'gantt') {
+                        if (tableContainer) tableContainer.classList.add('hidden');
+                        if (ganttContainer) ganttContainer.classList.remove('hidden');
+                        if (typeof window.renderGanttChart === 'function') window.renderGanttChart();
+                    } else {
+                        if (tableContainer) tableContainer.classList.remove('hidden');
+                        if (ganttContainer) ganttContainer.classList.add('hidden');
+                    }
+                };
+            </script>
             <div class="flex items-center justify-between border-b border-gray-200 pt-1">
                 <div class="flex items-center gap-1">
                     <button type="button"
@@ -287,6 +488,22 @@
                 </div>
 
                 <div class="flex items-center gap-3">
+                    <!-- Filter PIC -->
+                    <form action="{{ route('future-planner.show', $futurePlan) }}" method="GET" class="flex items-center">
+                        @if($filter)
+                            <input type="hidden" name="filter" value="{{ $filter }}">
+                        @endif
+                        <select name="pic" onchange="this.form.submit()" class="text-xs border-gray-200 rounded-xl py-1.5 pl-3 pr-7 bg-gray-50 focus:border-indigo-500 focus:ring-indigo-500 font-medium text-gray-700">
+                            <option value="">Semua PIC</option>
+                            <option value="unassigned" {{ ($picFilter ?? '') === 'unassigned' ? 'selected' : '' }}>Belum Ada PIC</option>
+                            @foreach($allMembers as $member)
+                                <option value="{{ $member->id }}" {{ (string)($picFilter ?? '') === (string)$member->id ? 'selected' : '' }}>
+                                    PIC: {{ $member->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </form>
+
                     <div class="relative w-full sm:w-64">
                         <input type="text" id="itemSearchInput" onkeyup="filterItemsTable()" placeholder="Cari item di tabel..."
                                class="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl border-gray-200 focus:border-indigo-500 focus:ring-indigo-500 placeholder-gray-400">
@@ -418,6 +635,18 @@
                                                             <span>📅 + Jadwal</span>
                                                         </button>
                                                     @endif
+
+                                                    <!-- Quick PIC Selector -->
+                                                    <select onchange="assignItemPic({{ $item->id }}, this.value)"
+                                                            class="text-[10px] py-0.5 pl-1.5 pr-5 rounded border border-gray-200 bg-gray-50 text-gray-700 hover:border-indigo-300 focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                                                            title="Pilih PIC / Penanggung Jawab Item">
+                                                        <option value="">👤 PIC: -</option>
+                                                        @foreach($allMembers as $member)
+                                                            <option value="{{ $member->id }}" {{ (int)$item->assigned_to === (int)$member->id ? 'selected' : '' }}>
+                                                                👤 {{ $member->name }}
+                                                            </option>
+                                                        @endforeach
+                                                    </select>
                                                 </div>
                                             </div>
                                         </div>
@@ -503,7 +732,28 @@
                                                 </button>
                                             @endif
 
-                                            <!-- 4. Tombol Atur Tanggal Gantt Chart -->
+                                            <!-- 4. Tombol Bayar & Catat ke Transaksi / Badge Tercatat -->
+                                            @if($item->transaction_id)
+                                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Sudah dicatat ke Transaksi & memotong saldo">
+                                                    💳 Tercatat
+                                                </span>
+                                            @elseif($item->effective_subtotal > 0)
+                                                @php
+                                                    $checkoutPayload = [
+                                                        'id' => $item->id,
+                                                        'title' => $item->title,
+                                                        'amount' => (float) ($item->subtotal > 0 ? $item->subtotal : $item->effective_subtotal),
+                                                    ];
+                                                @endphp
+                                                <button type="button"
+                                                        onclick='openCheckoutItemModal(@json($checkoutPayload))'
+                                                        class="px-2 py-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-[11px] font-bold transition"
+                                                        title="Tandai selesai sekaligus catat sebagai transaksi & potong saldo rekening">
+                                                    💳 Bayar
+                                                </button>
+                                            @endif
+
+                                            <!-- 5. Tombol Atur Tanggal Gantt Chart -->
                                             <button type="button"
                                                     onclick="openDateEditModal({{ $item->id }})"
                                                     class="p-1 text-gray-400 hover:text-indigo-600 rounded hover:bg-gray-100 transition"
@@ -1216,6 +1466,180 @@
         </div>
     </div>
 
+    <!-- MODAL HUBUNGKAN REKENING (SINKING FUND) -->
+    <div id="linkSavingModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity bg-gray-900/60 backdrop-blur-xs" onclick="closeLinkSavingModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+            <div class="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl border border-gray-100">
+                <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900">Hubungkan Rekening Tabungan</h3>
+                        <p class="text-xs text-gray-500">Pilih rekening khusus untuk dana rencana ini</p>
+                    </div>
+                    <button type="button" onclick="closeLinkSavingModal()" class="text-gray-400 hover:text-gray-600 p-1">✕</button>
+                </div>
+
+                <form action="{{ route('future-planner.saving.link', $futurePlan) }}" method="POST" class="space-y-4">
+                    @csrf
+                    @method('PATCH')
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1.5">Rekening Tabungan</label>
+                        <select name="saving_id" class="w-full text-sm border border-gray-300 rounded-xl px-3.5 py-2.5 focus:ring-2 focus:ring-indigo-500 bg-white">
+                            <option value="">-- Tidak Terhubung (Lepaskan Tautan) --</option>
+                            @foreach($userSavings as $uSaving)
+                                <option value="{{ $uSaving->id }}" {{ (int)$futurePlan->saving_id === (int)$uSaving->id ? 'selected' : '' }}>
+                                    {{ $uSaving->name }} ({{ $uSaving->bank->name ?? 'Bank' }}) — Rp {{ number_format($uSaving->current_balance, 0, ',', '.') }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button type="button" onclick="closeLinkSavingModal()" class="px-4 py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl">
+                            Batal
+                        </button>
+                        <button type="submit" class="px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm">
+                            Simpan Tautan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CHECKOUT / BAYAR ITEM KE TRANSAKSI -->
+    <div id="checkoutItemModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity bg-gray-900/60 backdrop-blur-xs" onclick="closeCheckoutItemModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+            <div class="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl border border-gray-100">
+                <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900">💳 Bayar & Catat Transaksi</h3>
+                        <p class="text-xs text-gray-500 mt-0.5" id="checkoutModalItemTitle">-</p>
+                    </div>
+                    <button type="button" onclick="closeCheckoutItemModal()" class="text-gray-400 hover:text-gray-600 p-1">✕</button>
+                </div>
+
+                <form id="checkoutItemForm" method="POST" class="space-y-3.5">
+                    @csrf
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Sumber Rekening <span class="text-rose-500">*</span></label>
+                        <select name="savings_id" id="checkoutSavingSelect" required class="w-full text-sm border border-gray-300 rounded-xl px-3.5 py-2.5 bg-white">
+                            @foreach($userSavings as $uSaving)
+                                <option value="{{ $uSaving->id }}" {{ (int)$futurePlan->saving_id === (int)$uSaving->id ? 'selected' : '' }}>
+                                    {{ $uSaving->name }} — Saldo: Rp {{ number_format($uSaving->current_balance, 0, ',', '.') }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">Nominal Bayar (Rp) <span class="text-rose-500">*</span></label>
+                            <input type="number" name="amount" id="checkoutAmountInput" min="1" step="0.01" required
+                                   class="w-full text-sm font-bold border border-gray-300 rounded-xl px-3.5 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">Tanggal Transaksi</label>
+                            <input type="date" name="transaction_date" id="checkoutDateInput" value="{{ now()->toDateString() }}"
+                                   class="w-full text-sm border border-gray-300 rounded-xl px-3.5 py-2">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Kategori Pengeluaran</label>
+                        <select name="category_id" class="w-full text-sm border border-gray-300 rounded-xl px-3.5 py-2.5 bg-white">
+                            <option value="">-- Tanpa Kategori --</option>
+                            @foreach($userCategories as $uCat)
+                                <option value="{{ $uCat->id }}">{{ $uCat->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Deskripsi Transaksi</label>
+                        <input type="text" name="description" id="checkoutDescriptionInput" required
+                               class="w-full text-sm border border-gray-300 rounded-xl px-3.5 py-2">
+                    </div>
+
+                    <div class="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800">
+                        Item ini akan otomatis ditandai <strong>Selesai</strong>, tercatat di menu <strong>Transaksi</strong>, dan memotong saldo rekening yang dipilih.
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button type="button" onclick="closeCheckoutItemModal()" class="px-4 py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl">
+                            Batal
+                        </button>
+                        <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm">
+                            Bayar & Simpan Transaksi
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CATAT SETORAN KONTRIBUSI DANA -->
+    <div id="contributionModal" class="fixed inset-0 z-50 hidden overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity bg-gray-900/60 backdrop-blur-xs" onclick="closeContributionModal()"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+            <div class="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl border border-gray-100">
+                <div class="flex items-center justify-between border-b border-gray-100 pb-3 mb-4">
+                    <div>
+                        <h3 class="text-base font-bold text-gray-900">🤝 Catat Setoran Kontribusi</h3>
+                        <p class="text-xs text-gray-500 mt-0.5">Tambahkan catatan setoran dana dari anggota rencana</p>
+                    </div>
+                    <button type="button" onclick="closeContributionModal()" class="text-gray-400 hover:text-gray-600 p-1">✕</button>
+                </div>
+
+                <form action="{{ route('future-planner.contributions.store', $futurePlan) }}" method="POST" class="space-y-3.5">
+                    @csrf
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Anggota yang Menyetor</label>
+                        <select name="user_id" class="w-full text-sm border border-gray-300 rounded-xl px-3.5 py-2.5 bg-white">
+                            @foreach($allMembers as $member)
+                                <option value="{{ $member->id }}" {{ (int)$member->id === (int)auth()->id() ? 'selected' : '' }}>
+                                    {{ $member->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">Nominal Setoran (Rp) <span class="text-rose-500">*</span></label>
+                            <input type="number" name="amount" min="1000" step="1000" required placeholder="500000"
+                                   class="w-full text-sm font-bold border border-gray-300 rounded-xl px-3.5 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-700 mb-1">Tanggal Setor</label>
+                            <input type="date" name="contributed_at" value="{{ now()->toDateString() }}"
+                                   class="w-full text-sm border border-gray-300 rounded-xl px-3.5 py-2">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Catatan (Opsional)</label>
+                        <input type="text" name="notes" placeholder="Contoh: Setoran bulan November"
+                               class="w-full text-sm border border-gray-300 rounded-xl px-3.5 py-2">
+                    </div>
+
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button type="button" onclick="closeContributionModal()" class="px-4 py-2 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl">
+                            Batal
+                        </button>
+                        <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm">
+                            Simpan Setoran
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     @php
         $ganttItemsData = $items->map(function ($item) {
             return [
@@ -1226,6 +1650,7 @@
                 'unit_price'           => (float) $item->unit_price,
                 'subtotal'             => (float) $item->effective_subtotal,
                 'is_completed'         => (bool) $item->is_completed,
+                'assignee_name'        => $item->assignee?->name,
                 'notes'                => $item->notes ?? '',
                 'depth'                => (int) ($item->depth ?? 0),
                 'has_children'         => $item->hasChildren(),
@@ -2636,6 +3061,11 @@
                             </span>
                         </div>
                         <div class="shrink-0 flex items-center gap-1">
+                            ${item.assignee_name ? `
+                                <span class="w-5 h-5 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center shrink-0" title="PIC: ${escapeHtml(item.assignee_name)}">
+                                    ${escapeHtml(item.assignee_name.charAt(0).toUpperCase())}
+                                </span>
+                            ` : ''}
                             ${hasDates ? `
                                 <button type="button"
                                         onclick="openDateEditModal(${item.id})"
@@ -2808,6 +3238,89 @@
             const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
             return months[m] || '';
         }
+
+        window.switchViewMode = switchViewMode;
+        window.setGanttScale = setGanttScale;
+        window.scrollToToday = scrollToToday;
+        window.openDateEditModal = openDateEditModal;
+        window.closeDateEditModal = closeDateEditModal;
+        window.applyDatePreset = applyDatePreset;
+        window.clearItemDates = clearItemDates;
+        window.renderGanttChart = renderGanttChart;
+
+        function openLinkSavingModal() {
+            const modal = document.getElementById('linkSavingModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeLinkSavingModal() {
+            const modal = document.getElementById('linkSavingModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function openCheckoutItemModal(item) {
+            const modal = document.getElementById('checkoutItemModal');
+            const form = document.getElementById('checkoutItemForm');
+            if (!modal || !form) return;
+
+            form.action = `/future-planner/${PLAN_ID}/items/${item.id}/checkout`;
+            document.getElementById('checkoutModalItemTitle').textContent = item.title;
+            document.getElementById('checkoutAmountInput').value = item.amount || 0;
+            document.getElementById('checkoutDescriptionInput').value = `[{{ addslashes($futurePlan->title) }}] ` + item.title;
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeCheckoutItemModal() {
+            const modal = document.getElementById('checkoutItemModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        window.openLinkSavingModal = openLinkSavingModal;
+        window.closeLinkSavingModal = closeLinkSavingModal;
+        window.openCheckoutItemModal = openCheckoutItemModal;
+        window.closeCheckoutItemModal = closeCheckoutItemModal;
+
+        function openContributionModal() {
+            const modal = document.getElementById('contributionModal');
+            if (modal) modal.classList.remove('hidden');
+        }
+
+        function closeContributionModal() {
+            const modal = document.getElementById('contributionModal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        async function assignItemPic(itemId, userId) {
+            try {
+                const response = await fetch(`/future-planner/${PLAN_ID}/items/${itemId}/assign`, {
+                    method: 'PATCH',
+                    headers: {
+                        'X-CSRF-TOKEN': CSRF_TOKEN,
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        assigned_to: userId ? parseInt(userId) : null
+                    })
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    alert(data.message || 'Gagal memperbarui PIC.');
+                } else {
+                    const gItem = GANTT_ITEMS.find(i => i.id == itemId);
+                    if (gItem) {
+                        gItem.assignee_name = data.assignee ? data.assignee.name : null;
+                    }
+                }
+            } catch (e) {
+                alert('Terjadi kesalahan saat menyimpan PIC.');
+            }
+        }
+
+        window.openContributionModal = openContributionModal;
+        window.closeContributionModal = closeContributionModal;
+        window.assignItemPic = assignItemPic;
 
         // Restore view mode on initial load
         document.addEventListener('DOMContentLoaded', () => {

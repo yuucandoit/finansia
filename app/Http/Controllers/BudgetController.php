@@ -48,6 +48,14 @@ class BudgetController extends Controller
         $totalRemaining = $totalBudget - $totalSpent;
         $overallPercentage = $totalBudget > 0 ? round(($totalSpent / $totalBudget) * 100, 1) : 0;
 
+        // Alert pos anggaran Over-Budget (>= 100%) dan Hampir Habis (80% - 99.9%)
+        $overBudgetItems = $budgets->filter(fn($b) => $b->amount > 0 && $b->spent > $b->amount)->values();
+        $warningBudgetItems = $budgets->filter(function ($b) {
+            if ($b->amount <= 0) return false;
+            $pct = ($b->spent / $b->amount) * 100;
+            return $pct >= 80 && $b->spent <= $b->amount;
+        })->values();
+
         // Kategori pengeluaran (semua kategori Cash Out dapat dipilih)
         $availableCategories = Category::forUser($userId)
             ->where('type', 'Cash Out')
@@ -81,6 +89,8 @@ class BudgetController extends Controller
             'totalSpent'          => $totalSpent,
             'totalRemaining'      => $totalRemaining,
             'overallPercentage'   => $overallPercentage,
+            'overBudgetItems'     => $overBudgetItems,
+            'warningBudgetItems'  => $warningBudgetItems,
             'availableCategories' => $availableCategories,
             'allCategories'       => $allCategories,
         ]);

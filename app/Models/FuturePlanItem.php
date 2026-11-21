@@ -21,6 +21,8 @@ class FuturePlanItem extends Model
         'quantity',
         'unit_price',
         'is_completed',
+        'transaction_id',
+        'assigned_to',
         'notes',
         'start_date',
         'end_date',
@@ -31,6 +33,8 @@ class FuturePlanItem extends Model
         'quantity'       => 'integer',
         'unit_price'     => 'decimal:2',
         'is_completed'   => 'boolean',
+        'transaction_id' => 'integer',
+        'assigned_to'    => 'integer',
         'order'          => 'integer',
         'parent_id'      => 'integer',
         'future_plan_id' => 'integer',
@@ -41,6 +45,16 @@ class FuturePlanItem extends Model
     public function futurePlan(): BelongsTo
     {
         return $this->belongsTo(FuturePlan::class, 'future_plan_id');
+    }
+
+    public function transaction(): BelongsTo
+    {
+        return $this->belongsTo(Transaction::class, 'transaction_id');
+    }
+
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_to');
     }
 
     public function parent(): BelongsTo
@@ -61,7 +75,7 @@ class FuturePlanItem extends Model
     public function allChildren(): HasMany
     {
         return $this->hasMany(FuturePlanItem::class, 'parent_id')
-            ->with('allChildren')
+            ->with(['allChildren', 'assignee'])
             ->orderBy('order')
             ->orderBy('id');
     }
@@ -282,9 +296,9 @@ class FuturePlanItem extends Model
      * Mengambil seluruh item dalam satu plan secara flat terurut Depth-First
      * untuk dirender dalam baris tabel spreadsheet/task list bertingkat.
      */
-    public static function getFlatTreeForPlan(int $planId, ?string $filter = null): Collection
+    public static function getFlatTreeForPlan(int $planId, ?string $filter = null, ?string $picFilter = null): Collection
     {
-        $query = static::with('allChildren')
+        $query = static::with(['allChildren', 'assignee'])
             ->where('future_plan_id', $planId)
             ->whereNull('parent_id')
             ->orderBy('order')
@@ -298,11 +312,16 @@ class FuturePlanItem extends Model
         }
 
         if ($filter === 'completed') {
-            return $flatList->filter(fn ($item) => $item->is_completed)->values();
+            $flatList = $flatList->filter(fn ($item) => $item->is_completed)->values();
+        } elseif ($filter === 'pending') {
+            $flatList = $flatList->filter(fn ($item) => !$item->is_completed)->values();
         }
 
-        if ($filter === 'pending') {
-            return $flatList->filter(fn ($item) => !$item->is_completed)->values();
+        if ($picFilter === 'unassigned') {
+            $flatList = $flatList->filter(fn ($item) => empty($item->assigned_to))->values();
+        } elseif (!empty($picFilter) && is_numeric($picFilter)) {
+            $picId = (int) $picFilter;
+            $flatList = $flatList->filter(fn ($item) => (int) $item->assigned_to === $picId)->values();
         }
 
         return $flatList;

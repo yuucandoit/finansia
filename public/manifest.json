@@ -1,0 +1,25 @@
+{
+    "name": "Finansia — Manajemen Keuangan Pribadi",
+    "short_name": "Finansia",
+    "description": "Aplikasi pencatatan keuangan pribadi, anggaran, tabungan, future planner, dan asisten AI.",
+    "start_url": "/dashboard",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#0f172a",
+    "theme_color": "#234066",
+    "icons": [
+        {
+            "src": "/assets/logo/logofinansiabaru_192x192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/assets/logo/logofinansiabaru_512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}

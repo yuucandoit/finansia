@@ -87,17 +87,19 @@ class BudgetItem extends Model
         $startDate = Carbon::createFromDate($year, $month, 1)->startOfMonth();
         $endDate = Carbon::createFromDate($year, $month, 1)->endOfMonth();
 
-        // 1. Transaksi yang secara eksplisit dikaitkan ke pos ini
+        // 1. Transaksi yang secara eksplisit dikaitkan ke pos ini (non-split)
         $directSpent = (float) Transaction::where('budget_item_id', $this->id)
             ->whereIn('type', ['Cash Out'])
+            ->whereDoesntHave('items')
             ->sum('amount');
 
-        // 2. Transaksi unassigned (budget_item_id IS NULL) di kategori & rentang bulan yang sama
+        // 2. Transaksi unassigned (budget_item_id IS NULL) di kategori & rentang bulan yang sama (non-split)
         $unassignedQuery = Transaction::where('user_id', $userId)
             ->whereNull('budget_item_id')
             ->where('category_id', $this->category_id)
             ->whereIn('type', ['Cash Out'])
-            ->whereBetween('transaction_date', [$startDate, $endDate]);
+            ->whereBetween('transaction_date', [$startDate, $endDate])
+            ->whereDoesntHave('items');
 
         // Cek apakah ada pos anggaran lain di kategori yang sama pada bulan ini
         $siblingCount = static::where('budget_id', $this->budget_id)
@@ -120,7 +122,22 @@ class BudgetItem extends Model
 
         $unassignedSpent = (float) $unassignedQuery->sum('amount');
 
-        return $directSpent + $unassignedSpent;
+        // 3. Item split transaksi (TransactionItem) yang terhubung ke pos ini atau kategori yang sama
+        $splitDirectSpent = (float) TransactionItem::where('budget_item_id', $this->id)
+            ->whereHas('transaction', fn($q) => $q->where('user_id', $userId)->whereIn('type', ['Cash Out']))
+            ->sum('amount');
+
+        $splitUnassignedSpent = 0.0;
+        if ($siblingCount === 0) {
+            $splitUnassignedSpent = (float) TransactionItem::whereNull('budget_item_id')
+                ->where('category_id', $this->category_id)
+                ->whereHas('transaction', fn($q) => $q->where('user_id', $userId)
+                    ->whereIn('type', ['Cash Out'])
+                    ->whereBetween('transaction_date', [$startDate, $endDate]))
+                ->sum('amount');
+        }
+
+        return $directSpent + $unassignedSpent + $splitDirectSpent + $splitUnassignedSpent;
     }
 
     /**

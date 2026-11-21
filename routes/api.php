@@ -22,6 +22,12 @@ use App\Http\Controllers\Api\UserApprovalController;
 |
 */
 
+Route::post('/telegram/webhook', [\App\Http\Controllers\TelegramController::class, 'webhook'])
+    ->name('api.telegram.webhook');
+
+Route::post('/billing/webhook', [\App\Http\Controllers\BillingController::class, 'webhook'])
+    ->name('api.billing.webhook');
+
 Route::prefix('v1')->group(function () {
 
     // =========================================================================

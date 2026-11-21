@@ -19,6 +19,7 @@ class FuturePlan extends Model
 
     protected $fillable = [
         'user_id',
+        'saving_id',
         'title',
         'description',
         'start_date',
@@ -32,6 +33,7 @@ class FuturePlan extends Model
         'start_date'  => 'date',
         'target_date' => 'date',
         'user_id'     => 'integer',
+        'saving_id'   => 'integer',
     ];
 
     public const STATUS_PLANNED     = 'planned';
@@ -73,6 +75,46 @@ class FuturePlan extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function savingAccount(): BelongsTo
+    {
+        return $this->belongsTo(Saving::class, 'saving_id');
+    }
+
+    public function activities(): HasMany
+    {
+        return $this->hasMany(FuturePlanActivity::class, 'future_plan_id');
+    }
+
+    /**
+     * Persentase kesiapan dana dari rekening yang terhubung dibanding sisa kebutuhan dana.
+     */
+    public function getFundReadinessPercentageAttribute(): float
+    {
+        if (!$this->savingAccount) {
+            return 0.0;
+        }
+
+        $remaining = $this->remaining_amount;
+        if ($remaining <= 0) {
+            return 100.0;
+        }
+
+        $balance = max(0.0, (float) $this->savingAccount->current_balance);
+        return min(100.0, round(($balance / $remaining) * 100, 1));
+    }
+
+    /**
+     * Kekurangan dana pada rekening terhubung dibanding sisa kebutuhan (0 jika sudah cukup).
+     */
+    public function getFundShortfallAttribute(): float
+    {
+        if (!$this->savingAccount) {
+            return $this->remaining_amount;
+        }
+
+        return max(0.0, $this->remaining_amount - (float) $this->savingAccount->current_balance);
+    }
+
     public function members(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'future_plan_members')
@@ -93,6 +135,25 @@ class FuturePlan extends Model
             ->whereNull('parent_id')
             ->orderBy('order')
             ->orderBy('id');
+    }
+
+    public function contributions(): HasMany
+    {
+        return $this->hasMany(FuturePlanContribution::class, 'future_plan_id')
+            ->orderBy('contributed_at', 'desc')
+            ->orderBy('id', 'desc');
+    }
+
+    /**
+     * Total seluruh kontribusi dana dari semua anggota rencana.
+     */
+    public function getTotalContributionsAmountAttribute(): float
+    {
+        if ($this->relationLoaded('contributions')) {
+            return (float) $this->contributions->sum('amount');
+        }
+
+        return (float) $this->contributions()->sum('amount');
     }
 
     /**

@@ -7,10 +7,11 @@ use App\Models\Category;
 use App\Models\Saving;
 use App\Models\Transaction;
 use App\Services\DashboardService;
+use App\Services\SpendingInsightService;
 
 class DashboardController extends Controller
 {
-    public function index(DashboardService $dashboardService)
+    public function index(DashboardService $dashboardService, SpendingInsightService $insightService)
     {
         $user = auth()->user();
         $userId = $user->id;
@@ -38,8 +39,29 @@ class DashboardController extends Controller
             ->first();
         $budgetItems = $activeBudget ? $activeBudget->items : collect([]);
 
+        $spendingInsights = $insightService->build(
+            $user,
+            $activeBudget,
+            (float) $dashboard['cashflow']['income']['amount'],
+            (float) $dashboard['cashflow']['expense']['amount']
+        );
+
+        $hasSaving = $savings->isNotEmpty();
+        $hasBudget = $budgetItems->isNotEmpty();
+        $hasTransaction = $recentTransactions->isNotEmpty();
+        $completedSteps = ($hasSaving ? 1 : 0) + ($hasBudget ? 1 : 0) + ($hasTransaction ? 1 : 0);
+        $onboarding = [
+            'has_saving'      => $hasSaving,
+            'has_budget'      => $hasBudget,
+            'has_transaction' => $hasTransaction,
+            'completed_steps' => $completedSteps,
+            'show'            => $completedSteps < 3,
+        ];
+
         return view('dashboard', [
             'dashboard'          => $dashboard,
+            'spendingInsights'   => $spendingInsights,
+            'onboarding'         => $onboarding,
             'totalBalance'       => $dashboard['net_worth']['current'],
             'cashInThisMonth'    => $dashboard['cashflow']['income']['amount'],
             'cashOutThisMonth'   => $dashboard['cashflow']['expense']['amount'],

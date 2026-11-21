@@ -38,7 +38,13 @@ return [
     'openrouter' => [
         'api_key' => env('OPENROUTER_API_KEY'),
         'primary_model' => env('OPENROUTER_PRIMARY_MODEL', 'google/gemma-4-26b-a4b-it:free'),
-        'fallback_model' => env('OPENROUTER_FALLBACK_MODEL', 'qwen/qwen3.8-27b:free'),
+        'fallback_model' => env('OPENROUTER_FALLBACK_MODEL', 'openrouter/free'),
+    ],
+
+    'telegram' => [
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'bot_username' => env('TELEGRAM_BOT_USERNAME', 'FinansiaBot'),
+        'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
     ],
 
 ];

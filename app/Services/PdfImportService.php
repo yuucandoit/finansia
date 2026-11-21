@@ -19,15 +19,18 @@ class PdfImportService
     protected BudgetService $budgetService;
     protected OpenRouterService $openRouterService;
     protected DuplicateTransactionHandler $duplicateHandler;
+    protected SmartRuleService $smartRuleService;
 
     public function __construct(
         BudgetService $budgetService,
         OpenRouterService $openRouterService,
-        ?DuplicateTransactionHandler $duplicateHandler = null
+        ?DuplicateTransactionHandler $duplicateHandler = null,
+        ?SmartRuleService $smartRuleService = null
     ) {
         $this->budgetService = $budgetService;
         $this->openRouterService = $openRouterService;
         $this->duplicateHandler = $duplicateHandler ?? app(DuplicateTransactionHandler::class);
+        $this->smartRuleService = $smartRuleService ?? app(SmartRuleService::class);
     }
 
     /**
@@ -304,15 +307,28 @@ class PdfImportService
 
             if ($userId) {
                 try {
-                    $category = $this->budgetService->resolveCategory($description, $userId);
-                    if ($category) {
-                        $suggestedCategoryId = $category->id;
-                        $suggestedCategoryName = $category->name;
+                    $ruleMatch = $this->smartRuleService->matchDescription(
+                        $userId,
+                        $description,
+                        $parsedDate->format('Y-m-d')
+                    );
 
-                        // Cari budget item yang cocok dengan kategori ini
-                        $matchingBudgetItem = $activeBudgets->firstWhere('category_id', $category->id);
-                        if ($matchingBudgetItem) {
-                            $suggestedBudgetItemId = $matchingBudgetItem->id;
+                    if ($ruleMatch) {
+                        $suggestedCategoryId = $ruleMatch['category_id'];
+                        $suggestedCategoryName = $ruleMatch['category_name'];
+                        $suggestedBudgetItemId = $ruleMatch['budget_item_id']
+                            ?? $activeBudgets->firstWhere('category_id', $suggestedCategoryId)?->id;
+                    } else {
+                        $category = $this->budgetService->resolveCategory($description, $userId);
+                        if ($category) {
+                            $suggestedCategoryId = $category->id;
+                            $suggestedCategoryName = $category->name;
+
+                            // Cari budget item yang cocok dengan kategori ini
+                            $matchingBudgetItem = $activeBudgets->firstWhere('category_id', $category->id);
+                            if ($matchingBudgetItem) {
+                                $suggestedBudgetItemId = $matchingBudgetItem->id;
+                            }
                         }
                     }
                 } catch (\Exception $e) {

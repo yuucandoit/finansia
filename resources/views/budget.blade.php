@@ -164,6 +164,37 @@
                 </form>
             </div>
 
+            <!-- Alert Otomatis Over-Budget & Hampir Habis -->
+            @if(($overBudgetItems ?? collect())->isNotEmpty() || ($warningBudgetItems ?? collect())->isNotEmpty())
+                <div class="space-y-2.5">
+                    @if(($overBudgetItems ?? collect())->isNotEmpty())
+                        <div class="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 shadow-2xs">
+                            <span class="text-xl shrink-0">🚨</span>
+                            <div class="flex-1 text-xs sm:text-sm text-rose-900">
+                                <p class="font-bold">Peringatan Over-Budget ({{ $overBudgetItems->count() }} pos melebihi batas!)</p>
+                                <p class="text-rose-700 mt-0.5">
+                                    Pos berikut telah melewati anggaran bulan ini:
+                                    <strong>{{ $overBudgetItems->pluck('name')->implode(', ') }}</strong>.
+                                </p>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if(($warningBudgetItems ?? collect())->isNotEmpty())
+                        <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 shadow-2xs">
+                            <span class="text-xl shrink-0">⚠️</span>
+                            <div class="flex-1 text-xs sm:text-sm text-amber-900">
+                                <p class="font-bold">Anggaran Hampir Habis ({{ $warningBudgetItems->count() }} pos sudah ≥ 80%)</p>
+                                <p class="text-amber-700 mt-0.5">
+                                    Harap kendalikan pengeluaran pada pos:
+                                    <strong>{{ $warningBudgetItems->pluck('name')->implode(', ') }}</strong>.
+                                </p>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
             <!-- Summary Cards Overview -->
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <!-- Total Anggaran -->

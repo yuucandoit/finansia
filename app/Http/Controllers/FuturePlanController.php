@@ -2,13 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use App\Models\FuturePlan;
+use App\Models\FuturePlanActivity;
+use App\Models\FuturePlanContribution;
 use App\Models\FuturePlanItem;
+use App\Models\Saving;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Services\FuturePlanSpreadsheetService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -70,13 +76,21 @@ class FuturePlanController extends Controller
             'target_date' => 'nullable|date',
             'status'      => 'nullable|in:planned,in_progress,completed,cancelled',
             'color'       => 'nullable|string|max:30',
+            'saving_id'   => 'nullable|integer|exists:savings,id',
         ], [
             'title.required' => 'Nama rencana masa depan wajib diisi.',
             'target_date.date' => 'Format tanggal target tidak valid.',
         ]);
 
+        $savingId = null;
+        if (!empty($validated['saving_id'])) {
+            $saving = Saving::where('id', $validated['saving_id'])->where('user_id', auth()->id())->firstOrFail();
+            $savingId = $saving->id;
+        }
+
         $plan = FuturePlan::create([
             'user_id'     => auth()->id(),
+            'saving_id'   => $savingId,
             'title'       => trim($validated['title']),
             'description' => $validated['description'] ?? null,
             'target_date' => $validated['target_date'] ?? null,
@@ -98,10 +112,12 @@ class FuturePlanController extends Controller
         abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak. Anda tidak memiliki izin untuk melihat rencana ini.');
 
         // Update waktu aktif pengguna saat membuka halaman rencana
+        $futurePlan->load(['savingAccount', 'items.assignee']);
         $futurePlan->touchActiveUser($user);
 
         $filter = $request->query('filter'); // 'all', 'pending', 'completed'
-        $items = FuturePlanItem::getFlatTreeForPlan($futurePlan->id, $filter);
+        $picFilter = $request->query('pic');
+        $items = FuturePlanItem::getFlatTreeForPlan($futurePlan->id, $filter, $picFilter ? (int) $picFilter : null);
 
         // Ambil opsi item induk untuk pilihan dropdown di modal tambah/edit item
         $availableParents = $futurePlan->items()
@@ -125,6 +141,47 @@ class FuturePlanController extends Controller
             ->get();
         $isOwner = $futurePlan->isOwner($user);
 
+        // Alert overdue & due soon (H-3)
+        $todayStr = now()->toDateString();
+        $dueSoonStr = now()->addDays(3)->toDateString();
+        $allPlanItems = $futurePlan->items;
+        $overdueItems = $allPlanItems->filter(function (FuturePlanItem $it) use ($todayStr) {
+            return !$it->is_completed && $it->end_date && $it->end_date->format('Y-m-d') < $todayStr;
+        })->values();
+        $dueSoonItems = $allPlanItems->filter(function (FuturePlanItem $it) use ($todayStr, $dueSoonStr) {
+            if ($it->is_completed || !$it->end_date) {
+                return false;
+            }
+            $d = $it->end_date->format('Y-m-d');
+            return $d >= $todayStr && $d <= $dueSoonStr;
+        })->values();
+
+        // Kontribusi dana per member
+        $contributions = FuturePlanContribution::with('user:id,name')
+            ->where('future_plan_id', $futurePlan->id)
+            ->orderByDesc('contributed_at')
+            ->orderByDesc('id')
+            ->get();
+        $totalContributions = (float) $contributions->sum('amount');
+        $memberContributions = $allMembers->map(function ($member) use ($contributions, $totalContributions, $totalEstimated) {
+            $sum = (float) $contributions->where('user_id', $member->id)->sum('amount');
+            return [
+                'user'               => $member,
+                'total'              => $sum,
+                'share_of_contrib'   => $totalContributions > 0 ? round(($sum / $totalContributions) * 100, 1) : 0.0,
+                'share_of_estimated' => $totalEstimated > 0 ? round(($sum / $totalEstimated) * 100, 1) : 0.0,
+            ];
+        });
+
+        $userSavings = Saving::where('user_id', $user->id)->orderBy('name')->get();
+        $userCategories = Category::forUser($user->id)->where('type', 'Cash Out')->orderBy('name')->get();
+
+        $activities = FuturePlanActivity::with('user:id,name')
+            ->where('future_plan_id', $futurePlan->id)
+            ->latest()
+            ->limit(30)
+            ->get();
+
         return view('future-planner.show', compact(
             'futurePlan',
             'items',
@@ -137,9 +194,18 @@ class FuturePlanController extends Controller
             'completedItemsCount',
             'totalQuantity',
             'filter',
+            'picFilter',
             'activeUsers',
             'allMembers',
-            'isOwner'
+            'isOwner',
+            'overdueItems',
+            'dueSoonItems',
+            'contributions',
+            'totalContributions',
+            'memberContributions',
+            'userSavings',
+            'userCategories',
+            'activities'
         ));
     }
 
@@ -411,6 +477,7 @@ class FuturePlanController extends Controller
         ]);
 
         $futurePlan->touchActiveUser($user);
+        $this->logActivity($futurePlan, 'item_added', "Menambahkan item \"{$item->title}\"");
 
         if ($request->wantsJson()) {
             $freshPlan = $futurePlan->fresh(['rootItems.allChildren', 'items']);
@@ -569,6 +636,7 @@ class FuturePlanController extends Controller
         $item->save();
 
         $futurePlan->touchActiveUser($user);
+        $this->logActivity($futurePlan, 'item_toggled', "Menandai item \"{$item->title}\" sebagai " . ($item->is_completed ? 'selesai' : 'belum selesai'));
 
         if ($request->wantsJson() || $request->ajax()) {
             $freshPlan = $futurePlan->fresh(['rootItems.allChildren', 'items']);
@@ -586,6 +654,190 @@ class FuturePlanController extends Controller
 
         $msg = $item->is_completed ? 'Item ditandai sudah terbeli/selesai.' : 'Item ditandai belum selesai.';
         return back()->with('success', $msg);
+    }
+
+    public function linkSaving(Request $request, FuturePlan $futurePlan): RedirectResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak.');
+
+        $validated = $request->validate([
+            'saving_id' => 'nullable|integer|exists:savings,id',
+        ]);
+
+        if (!empty($validated['saving_id'])) {
+            $saving = Saving::where('id', $validated['saving_id'])->where('user_id', $user->id)->firstOrFail();
+            $futurePlan->update(['saving_id' => $saving->id]);
+            $this->logActivity($futurePlan, 'saving_linked', "Menghubungkan rekening dana \"{$saving->name}\"");
+            return back()->with('success', "Rekening \"{$saving->name}\" berhasil dihubungkan ke rencana ini.");
+        }
+
+        $futurePlan->update(['saving_id' => null]);
+        $this->logActivity($futurePlan, 'saving_linked', 'Melepaskan tautan rekening dana rencana');
+        return back()->with('success', 'Tautan rekening dana rencana dilepaskan.');
+    }
+
+    public function checkoutItem(Request $request, FuturePlan $futurePlan, FuturePlanItem $item): RedirectResponse|JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user) && $item->future_plan_id === $futurePlan->id, 403, 'Akses ditolak.');
+
+        $validated = $request->validate([
+            'savings_id'       => 'required|integer|exists:savings,id',
+            'category_id'      => 'nullable|integer|exists:categories,id',
+            'amount'           => 'nullable|numeric|min:1',
+            'transaction_date' => 'nullable|date',
+            'description'      => 'nullable|string|max:255',
+        ]);
+
+        $amount = (float) ($validated['amount'] ?? $item->estimated_total);
+        if ($amount <= 0) {
+            return back()->with('error', 'Nominal checkout harus lebih dari Rp 0.');
+        }
+
+        $txDate = $validated['transaction_date'] ?? now()->toDateString();
+        $description = !empty($validated['description'])
+            ? trim($validated['description'])
+            : "Future Plan ({$futurePlan->title}): {$item->title}";
+
+        try {
+            $createdTx = DB::transaction(function () use ($user, $validated, $item, $amount, $txDate, $description) {
+                $saving = Saving::where('user_id', $user->id)->lockForUpdate()->findOrFail($validated['savings_id']);
+
+                if ((float) $saving->current_balance < $amount) {
+                    throw new \Exception("Saldo rekening {$saving->name} tidak mencukupi.");
+                }
+
+                $tx = Transaction::create([
+                    'user_id'          => $user->id,
+                    'savings_id'       => $saving->id,
+                    'category_id'      => $validated['category_id'] ?? null,
+                    'type'             => 'Cash Out',
+                    'direction'        => Transaction::DIRECTION_OUT,
+                    'description'      => $description,
+                    'amount'           => $amount,
+                    'transaction_date' => $txDate,
+                    'is_manual'        => true,
+                ]);
+
+                $saving->decrement('current_balance', $amount);
+
+                $item->update([
+                    'is_completed'   => true,
+                    'transaction_id' => $tx->id,
+                ]);
+
+                return $tx;
+            });
+
+            $futurePlan->touchActiveUser($user);
+            $this->logActivity(
+                $futurePlan,
+                'item_checkout',
+                "Checkout item \"{$item->title}\" senilai Rp " . number_format($amount, 0, ',', '.')
+            );
+
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'success'        => true,
+                    'message'        => 'Item berhasil dibayar & dicatat ke transaksi!',
+                    'transaction_id' => $createdTx->id,
+                ]);
+            }
+
+            return back()->with('success', "Item \"{$item->title}\" berhasil dicatat ke Transaksi & saldo rekening telah dipotong!");
+        } catch (\Exception $e) {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+            }
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function assignItem(Request $request, FuturePlan $futurePlan, FuturePlanItem $item): RedirectResponse|JsonResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user) && $item->future_plan_id === $futurePlan->id, 403, 'Akses ditolak.');
+
+        $validated = $request->validate([
+            'assigned_to' => 'nullable|integer|exists:users,id',
+        ]);
+
+        $assigneeId = !empty($validated['assigned_to']) ? (int) $validated['assigned_to'] : null;
+        if ($assigneeId) {
+            $isMember = (int) $futurePlan->user_id === $assigneeId
+                || $futurePlan->members()->where('users.id', $assigneeId)->exists();
+            abort_unless($isMember, 422, 'PIC harus merupakan anggota rencana ini.');
+        }
+
+        $item->update(['assigned_to' => $assigneeId]);
+        $futurePlan->touchActiveUser($user);
+
+        if ($request->wantsJson()) {
+            return response()->json(['success' => true, 'assigned_to' => $assigneeId]);
+        }
+
+        return back()->with('success', 'PIC item berhasil diperbarui.');
+    }
+
+    public function storeContribution(Request $request, FuturePlan $futurePlan): RedirectResponse
+    {
+        $user = auth()->user();
+        abort_unless($futurePlan->hasAccess($user), 403, 'Akses ditolak.');
+
+        $validated = $request->validate([
+            'user_id'        => 'nullable|integer|exists:users,id',
+            'amount'         => 'required|numeric|min:1',
+            'contributed_at' => 'nullable|date',
+            'notes'          => 'nullable|string|max:255',
+        ]);
+
+        $contributorId = !empty($validated['user_id']) ? (int) $validated['user_id'] : $user->id;
+
+        FuturePlanContribution::create([
+            'future_plan_id' => $futurePlan->id,
+            'user_id'        => $contributorId,
+            'amount'         => (float) $validated['amount'],
+            'contributed_at' => $validated['contributed_at'] ?? now()->toDateString(),
+            'notes'          => !empty($validated['notes']) ? trim($validated['notes']) : null,
+        ]);
+
+        $futurePlan->touchActiveUser($user);
+        $this->logActivity(
+            $futurePlan,
+            'contribution_added',
+            "Mencatat kontribusi dana Rp " . number_format((float) $validated['amount'], 0, ',', '.')
+        );
+
+        return back()->with('success', 'Setoran kontribusi dana berhasil dicatat!');
+    }
+
+    public function destroyContribution(FuturePlan $futurePlan, FuturePlanContribution $contribution): RedirectResponse
+    {
+        $user = auth()->user();
+        abort_unless(
+            $futurePlan->hasAccess($user)
+            && $contribution->future_plan_id === $futurePlan->id
+            && ($futurePlan->isOwner($user) || (int) $contribution->user_id === (int) $user->id),
+            403,
+            'Akses ditolak.'
+        );
+
+        $contribution->delete();
+        $futurePlan->touchActiveUser($user);
+
+        return back()->with('success', 'Catatan kontribusi berhasil dihapus.');
+    }
+
+    protected function logActivity(FuturePlan $plan, string $action, string $description, array $meta = []): void
+    {
+        FuturePlanActivity::create([
+            'future_plan_id' => $plan->id,
+            'user_id'        => auth()->id(),
+            'action'         => $action,
+            'description'    => $description,
+            'meta'           => $meta ?: null,
+        ]);
     }
 
     /**
@@ -609,6 +861,7 @@ class FuturePlanController extends Controller
         ]);
 
         $futurePlan->touchActiveUser($user);
+        $this->logActivity($futurePlan, 'item_dates_updated', "Mengubah jadwal item \"{$item->title}\"");
 
         return response()->json([
             'success'              => true,
@@ -633,6 +886,7 @@ class FuturePlanController extends Controller
         $item->delete();
 
         $futurePlan->touchActiveUser($user);
+        $this->logActivity($futurePlan, 'item_deleted', "Menghapus item \"{$title}\"");
 
         if (request()->wantsJson()) {
             return response()->json([

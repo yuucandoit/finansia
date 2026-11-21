@@ -27,4 +27,37 @@ class Saving extends Model
     {
         return $this->hasMany(Transaction::class,'savings_id','id');
     }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function members()
+    {
+        return $this->belongsToMany(User::class, 'saving_members', 'saving_id', 'user_id')
+            ->withPivot('role')
+            ->withTimestamps();
+    }
+
+    public function isAccessibleBy(User $user): bool
+    {
+        if ((int) $this->user_id === (int) $user->id) {
+            return true;
+        }
+
+        return $this->members()->where('users.id', $user->id)->exists();
+    }
+
+    public function canRecordBy(User $user): bool
+    {
+        if ((int) $this->user_id === (int) $user->id) {
+            return true;
+        }
+
+        return $this->members()
+            ->where('users.id', $user->id)
+            ->wherePivot('role', 'editor')
+            ->exists();
+    }
 }

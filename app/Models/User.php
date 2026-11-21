@@ -24,6 +24,11 @@ class User extends Authenticatable
         'password',
         'role',
         'status',
+        'telegram_chat_id',
+        'telegram_link_code',
+        'telegram_notifications_enabled',
+        'plan_tier',
+        'plan_expires_at',
     ];
 
     /**
@@ -46,6 +51,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'telegram_notifications_enabled' => 'boolean',
+            'plan_expires_at' => 'datetime',
         ];
     }
 
@@ -121,5 +128,59 @@ class User extends Authenticatable
                 'current_balance' => 0,
             ]
         );
+    }
+
+    public function subscriptions()
+    {
+        return $this->hasMany(Subscription::class);
+    }
+
+    public function aiUsageLogs()
+    {
+        return $this->hasMany(AiUsageLog::class);
+    }
+
+    public function isPro(): bool
+    {
+        if (in_array($this->role, ['admin', 'master_mind'], true)) {
+            return true;
+        }
+
+        if ($this->plan_tier !== 'pro') {
+            return false;
+        }
+
+        return $this->plan_expires_at === null || $this->plan_expires_at->isFuture();
+    }
+
+    public function monthlyAiUsageCount(): int
+    {
+        return (int) $this->aiUsageLogs()
+            ->where('created_at', '>=', now()->startOfMonth())
+            ->count();
+    }
+
+    public function remainingAiQuota(): ?int
+    {
+        if ($this->isPro()) {
+            return null;
+        }
+
+        $limit = (int) config('saas.plans.free.monthly_ai_limit', 30);
+
+        return max(0, $limit - $this->monthlyAiUsageCount());
+    }
+
+    public function canUseAi(): bool
+    {
+        if (!config('saas.enforcement_enabled', false)) {
+            return true;
+        }
+
+        if ($this->isPro()) {
+            return true;
+        }
+
+        return ($this->remainingAiQuota() ?? 0) > 0;
     }
 }

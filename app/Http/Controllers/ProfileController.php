@@ -3,11 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\Asset;
+use App\Models\Budget;
+use App\Models\Category;
+use App\Models\CategoryRule;
+use App\Models\Debt;
+use App\Models\FuturePlan;
+use App\Models\RecurringTransaction;
+use App\Models\Saving;
+use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProfileController extends Controller
 {

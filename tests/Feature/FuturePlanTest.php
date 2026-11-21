@@ -826,4 +826,180 @@ class FuturePlanTest extends TestCase
         $this->assertEquals('2026-11-01', $importedItem->start_date->format('Y-m-d'));
         $this->assertEquals('2026-11-07', $importedItem->end_date->format('Y-m-d'));
     }
+
+    public function test_user_can_link_saving_account_as_sinking_fund_and_compute_readiness(): void
+    {
+        $saving = \App\Models\Saving::factory()->create([
+            'user_id'         => $this->user->id,
+            'name'            => 'Dana Nikah BCA',
+            'current_balance' => 3_000_000,
+        ]);
+
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Persiapan Nikah',
+        ]);
+
+        FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Cincin',
+            'quantity'       => 1,
+            'unit_price'     => 6_000_000,
+            'order'          => 1,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patch(route('future-planner.saving.link', $plan), ['saving_id' => $saving->id])
+            ->assertRedirect();
+
+        $plan->refresh();
+        $this->assertEquals($saving->id, $plan->saving_id);
+        $this->assertEquals(50.0, $plan->fund_readiness_percentage);
+        $this->assertEquals(3_000_000.0, $plan->fund_shortfall);
+    }
+
+    public function test_user_can_checkout_future_plan_item_to_transaction_and_deduct_saving_balance(): void
+    {
+        $saving = \App\Models\Saving::factory()->create([
+            'user_id'         => $this->user->id,
+            'current_balance' => 5_000_000,
+        ]);
+
+        $cat = \App\Models\Category::create([
+            'user_id' => $this->user->id,
+            'name'    => 'Elektronik',
+            'type'    => 'Cash Out',
+        ]);
+
+        $plan = FuturePlan::create([
+            'user_id'   => $this->user->id,
+            'saving_id' => $saving->id,
+            'title'     => 'Upgrade Setup',
+        ]);
+
+        $item = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Monitor 4K',
+            'quantity'       => 1,
+            'unit_price'     => 3_500_000,
+            'is_completed'   => false,
+            'order'          => 1,
+        ]);
+
+        $response = $this->actingAs($this->user)->post(route('future-planner.items.checkout', [$plan, $item]), [
+            'savings_id'       => $saving->id,
+            'category_id'      => $cat->id,
+            'amount'           => 3_500_000,
+            'transaction_date' => '2026-11-18',
+            'description'      => '[Upgrade Setup] Monitor 4K',
+        ]);
+
+        $response->assertRedirect();
+
+        $item->refresh();
+        $this->assertTrue($item->is_completed);
+        $this->assertNotNull($item->transaction_id);
+
+        $this->assertEquals(1_500_000.0, (float) $saving->fresh()->current_balance);
+        $this->assertDatabaseHas('transactions', [
+            'id'          => $item->transaction_id,
+            'user_id'     => $this->user->id,
+            'savings_id'  => $saving->id,
+            'category_id' => $cat->id,
+            'type'        => 'Cash Out',
+            'direction'   => 'out',
+            'amount'      => 3_500_000,
+            'description' => '[Upgrade Setup] Monitor 4K',
+        ]);
+    }
+
+    public function test_user_can_assign_pic_and_filter_items_by_pic(): void
+    {
+        $partner = User::factory()->create(['status' => 'approved', 'name' => 'Pasangan']);
+        $outsider = User::factory()->create(['status' => 'approved', 'name' => 'Orang Luar']);
+
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Persiapan Acara',
+        ]);
+        $plan->members()->attach($partner->id, ['role' => 'member', 'status' => 'active']);
+
+        $item1 = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Booking Gedung',
+            'quantity'       => 1,
+            'unit_price'     => 10_000_000,
+            'order'          => 1,
+        ]);
+
+        $item2 = FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Cetak Undangan',
+            'quantity'       => 1,
+            'unit_price'     => 1_000_000,
+            'order'          => 2,
+        ]);
+
+        // Assign partner as PIC for item1
+        $this->actingAs($this->user)
+            ->patchJson(route('future-planner.items.assign', [$plan, $item1]), ['assigned_to' => $partner->id])
+            ->assertStatus(200)
+            ->assertJson(['success' => true]);
+
+        $this->assertEquals($partner->id, $item1->fresh()->assigned_to);
+
+        // Outsider cannot be assigned
+        $this->actingAs($this->user)
+            ->patchJson(route('future-planner.items.assign', [$plan, $item2]), ['assigned_to' => $outsider->id])
+            ->assertStatus(422);
+
+        // Filter by PIC
+        $resPic = $this->actingAs($this->user)->get(route('future-planner.show', [$plan, 'pic' => $partner->id]));
+        $resPic->assertStatus(200);
+        $this->assertCount(1, $resPic->viewData('items'));
+        $this->assertEquals('Booking Gedung', $resPic->viewData('items')->first()->title);
+    }
+
+    public function test_user_can_record_and_delete_member_contribution_and_see_overdue_alerts(): void
+    {
+        $plan = FuturePlan::create([
+            'user_id' => $this->user->id,
+            'title'   => 'Liburan Keluarga',
+        ]);
+
+        // Overdue item
+        FuturePlanItem::create([
+            'future_plan_id' => $plan->id,
+            'title'          => 'Pesan Hotel',
+            'quantity'       => 1,
+            'unit_price'     => 2_000_000,
+            'is_completed'   => false,
+            'start_date'     => now()->subDays(10)->toDateString(),
+            'end_date'       => now()->subDays(2)->toDateString(),
+            'order'          => 1,
+        ]);
+
+        // Record contribution
+        $this->actingAs($this->user)
+            ->post(route('future-planner.contributions.store', $plan), [
+                'user_id'        => $this->user->id,
+                'amount'         => 750_000,
+                'contributed_at' => now()->toDateString(),
+                'notes'          => 'Setoran awal',
+            ])
+            ->assertRedirect();
+
+        $res = $this->actingAs($this->user)->get(route('future-planner.show', $plan));
+        $res->assertStatus(200);
+        $this->assertEquals(750_000.0, (float) $res->viewData('totalContributions'));
+        $this->assertCount(1, $res->viewData('overdueItems'));
+        $res->assertSee('Pesan Hotel');
+
+        $contrib = \App\Models\FuturePlanContribution::where('future_plan_id', $plan->id)->first();
+        $this->actingAs($this->user)
+            ->delete(route('future-planner.contributions.destroy', [$plan, $contrib]))
+            ->assertRedirect();
+
+        $this->assertDatabaseMissing('future_plan_contributions', ['id' => $contrib->id]);
+    }
 }

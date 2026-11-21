@@ -5,9 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Saving;
 use App\Models\Transaction;
-use App\Models\Transaction_Item;
+use App\Models\TransactionItem;
 use App\Services\DuplicateTransactionHandler;
 use App\Services\PdfImportService;
+use App\Services\SmartRuleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -21,7 +22,7 @@ class TransactionController extends Controller
     public function index(Request $request)
     {
         $userId = auth()->id();
-        $query = Transaction::with(['category', 'savingAccount'])->where('user_id', $userId);
+        $query = Transaction::with(['category', 'savingAccount', 'items.category', 'items.budgetItem'])->where('user_id', $userId);
 
         // Filter Search
         if ($request->has('search') && $request->search != '') {
@@ -56,7 +57,7 @@ class TransactionController extends Controller
             ->sum('amount');
 
         $saving = Saving::where('user_id', $userId)->get();
-        $categories = Category::orderBy('name')->get();
+        $categories = Category::forUser($userId)->orderBy('name')->get();
 
         $activeBudget = \App\Models\Budget::with('items.category')
             ->where('user_id', $userId)
@@ -100,6 +101,11 @@ class TransactionController extends Controller
             'budget_item_id'         => 'nullable|exists:budget_items,id',
             'fee'                    => 'nullable|numeric|min:0',
             'transaction_date'       => 'nullable|date',
+            'splits'                 => 'nullable|array',
+            'splits.*.category_id'   => 'nullable|exists:categories,id',
+            'splits.*.budget_item_id'=> 'nullable|exists:budget_items,id',
+            'splits.*.description'   => 'nullable|string|max:255',
+            'splits.*.amount'        => 'nullable|numeric|min:0',
         ]);
 
         $userId = auth()->id();
@@ -109,35 +115,59 @@ class TransactionController extends Controller
         $categoryId = $request->category_id;
         $budgetItemId = $request->budget_item_id ? (int) $request->budget_item_id : null;
 
-        // Jika user memilih pos anggaran tapi tidak memilih kategori, ambil kategori dari pos tersebut
-        if ($budgetItemId && !$categoryId) {
-            $bItem = \App\Models\BudgetItem::find($budgetItemId);
-            if ($bItem && $bItem->category_id) {
-                $categoryId = $bItem->category_id;
+        $splits = [];
+        $isTransfer = $request->type === 'Transfer' || ($request->type === 'Tabungan' && $request->destination_savings_id);
+        if (!$isTransfer) {
+            try {
+                $splits = $this->parseAndValidateSplits($request->input('splits', []), $amount);
+            } catch (\Exception $e) {
+                return redirect()->back()->withInput()->with('error', $e->getMessage());
             }
         }
 
-        // Auto-assign ke pos anggaran jika pengeluaran dan belum ada budget_item_id
-        if (!$budgetItemId && $request->type === 'Cash Out' && $categoryId) {
-            $tDate = Carbon::parse($date);
-            $activeBudget = \App\Models\Budget::where('user_id', $userId)
-                ->where('month', $tDate->month)
-                ->where('year', $tDate->year)
-                ->first();
+        if (!empty($splits)) {
+            $categoryId = null;
+            $budgetItemId = null;
+        } else {
+            // Auto-kategorisasi via Smart Rules jika user belum memilih kategori
+            if (!$categoryId && !$budgetItemId && !empty($request->description)) {
+                $ruleMatch = app(SmartRuleService::class)->matchDescription($userId, $request->description, (string) $date);
+                if ($ruleMatch) {
+                    $categoryId = $ruleMatch['category_id'];
+                    $budgetItemId = $ruleMatch['budget_item_id'] ?? $budgetItemId;
+                }
+            }
 
-            if ($activeBudget) {
-                $candidateItems = \App\Models\BudgetItem::where('budget_id', $activeBudget->id)
-                    ->where('category_id', $categoryId)
-                    ->get();
+            // Jika user memilih pos anggaran tapi tidak memilih kategori, ambil kategori dari pos tersebut
+            if ($budgetItemId && !$categoryId) {
+                $bItem = \App\Models\BudgetItem::find($budgetItemId);
+                if ($bItem && $bItem->category_id) {
+                    $categoryId = $bItem->category_id;
+                }
+            }
 
-                if ($candidateItems->count() === 1) {
-                    $budgetItemId = $candidateItems->first()->id;
-                } elseif ($candidateItems->count() > 1 && !empty($request->description)) {
-                    $descLower = strtolower($request->description);
-                    foreach ($candidateItems as $cItem) {
-                        if (str_contains($descLower, strtolower($cItem->name))) {
-                            $budgetItemId = $cItem->id;
-                            break;
+            // Auto-assign ke pos anggaran jika pengeluaran dan belum ada budget_item_id
+            if (!$budgetItemId && $request->type === 'Cash Out' && $categoryId) {
+                $tDate = Carbon::parse($date);
+                $activeBudget = \App\Models\Budget::where('user_id', $userId)
+                    ->where('month', $tDate->month)
+                    ->where('year', $tDate->year)
+                    ->first();
+
+                if ($activeBudget) {
+                    $candidateItems = \App\Models\BudgetItem::where('budget_id', $activeBudget->id)
+                        ->where('category_id', $categoryId)
+                        ->get();
+
+                    if ($candidateItems->count() === 1) {
+                        $budgetItemId = $candidateItems->first()->id;
+                    } elseif ($candidateItems->count() > 1 && !empty($request->description)) {
+                        $descLower = strtolower($request->description);
+                        foreach ($candidateItems as $cItem) {
+                            if (str_contains($descLower, strtolower($cItem->name))) {
+                                $budgetItemId = $cItem->id;
+                                break;
+                            }
                         }
                     }
                 }
@@ -145,7 +175,7 @@ class TransactionController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($userId, $request, $date, $amount, $fee, $categoryId, $budgetItemId) {
+            DB::transaction(function () use ($userId, $request, $date, $amount, $fee, $categoryId, $budgetItemId, $splits) {
                 if ($request->type === 'Transfer' || ($request->type === 'Tabungan' && $request->destination_savings_id)) {
                     $sourceSaving = Saving::where('user_id', $userId)->findOrFail($request->savings_id);
                     $destSaving = Saving::where('user_id', $userId)->findOrFail($request->destination_savings_id);
@@ -198,7 +228,7 @@ class TransactionController extends Controller
                         throw new \Exception("Saldo rekening {$saving->name} tidak mencukupi (Sisa: Rp " . number_format($saving->current_balance, 0, ',', '.') . ", Dibutuhkan: Rp " . number_format($amount + $fee, 0, ',', '.') . ").");
                     }
 
-                    Transaction::create([
+                    $createdTx = Transaction::create([
                         'user_id'          => $userId,
                         'savings_id'       => $saving->id,
                         'category_id'      => $categoryId,
@@ -210,6 +240,10 @@ class TransactionController extends Controller
                         'transaction_date' => $date,
                         'is_manual'        => true,
                     ]);
+
+                    foreach ($splits as $split) {
+                        $createdTx->items()->create($split);
+                    }
 
                     if ($request->type === 'Cash In') {
                         $saving->increment('current_balance', $amount);
@@ -247,78 +281,191 @@ class TransactionController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request,$id)
+    public function update(Request $request, $id)
     {
-        $transaksi = Transaction::find($id);
+        $userId = auth()->id();
+        $transaction = Transaction::where('user_id', $userId)->findOrFail($id);
 
-        $query = [];
-        if($request->type == 'Cash In'){
-            $query= [
-                'save_id' => $request->save_id,
-                'business_id' => $request->business_id,
-                'type' => $request->type,
-                'description' => $request->description,
-                'fee' => $request->fee,
-            ];
+        $validated = $request->validate([
+            'description'      => 'required|string|max:255',
+            'type'             => 'required|in:Cash In,Cash Out,Transfer,Tabungan',
+            'amount'           => 'required|numeric|min:0',
+            'savings_id'       => 'required|exists:savings,id',
+            'category_id'      => 'nullable|exists:categories,id',
+            'budget_item_id'   => 'nullable|exists:budget_items,id',
+            'fee'                    => 'nullable|numeric|min:0',
+            'transaction_date'       => 'nullable|date',
+            'splits'                 => 'nullable|array',
+            'splits.*.category_id'   => 'nullable|exists:categories,id',
+            'splits.*.budget_item_id'=> 'nullable|exists:budget_items,id',
+            'splits.*.description'   => 'nullable|string|max:255',
+            'splits.*.amount'        => 'nullable|numeric|min:0',
+        ]);
 
-            $savings = Saving::find($request->save_id);
-            //Jika Ganti CashIn
-            if($savings->saldo < $transaksi->fee){
-                $returnPlus = $transaksi->fee - $savings->saldo;
-            }else if($savings->saldo > $transaksi->fee){
-                $returnPlus = $savings->saldo - $transaksi->fee;
+        $newAmount = (float) $validated['amount'];
+        $newFee = (float) ($validated['fee'] ?? 0);
+        $newDate = $validated['transaction_date'] ?? $transaction->transaction_date;
+        $categoryId = $validated['category_id'] ?? null;
+        $budgetItemId = !empty($validated['budget_item_id']) ? (int) $validated['budget_item_id'] : null;
+
+        $splits = [];
+        if (!$transaction->transfer_group_id) {
+            try {
+                $splits = $this->parseAndValidateSplits($request->input('splits', []), $newAmount);
+            } catch (\Exception $e) {
+                return redirect()->back()->withInput()->with('error', $e->getMessage());
             }
-
-            Saving::where('id',$transaksi->save_id)->update([
-                'saldo' => $returnPlus
-            ]);
-
-            $plus = $savings->saldo + $request->fee;
-            Saving::where('id',$request->save_id)->update([
-                'saldo' => $plus
-            ]);
-        }else if($request->type == 'Cash Out') {
-            $query= [
-                'save_id' => $request->save_id,
-                'business_id' => $request->business_id,
-                'type' => $request->type,
-                'description' => $request->description,
-                'fee' => $request->fee,
-            ];
-
-            $savings = Saving::find($request->save_id);
-
-            if($savings->saldo < $transaksi->fee){
-                $returnMinus = $transaksi->fee + $savings->saldo;
-            }else if($savings->saldo > $transaksi->fee){
-                $returnMinus = $savings->saldo + $transaksi->fee;
-            }
-
-            Saving::where('id',$transaksi->save_id)->update([
-                'saldo' => $returnMinus
-            ]);
-
-            if($savings->saldo > $request->fee){
-                $minus = $savings->saldo - $request->fee;
-            }else {
-                $minus =  $request->fee - $savings->saldo;
-            }
-            Saving::where('id',$request->save_id)->update([
-                'saldo' => $minus
-            ]);
         }
 
-        $transaksi->update($query);
+        if (!empty($splits)) {
+            $categoryId = null;
+            $budgetItemId = null;
+        } elseif ($budgetItemId && !$categoryId) {
+            $bItem = \App\Models\BudgetItem::find($budgetItemId);
+            if ($bItem && $bItem->category_id) {
+                $categoryId = $bItem->category_id;
+            }
+        }
 
-        return redirect()->back()->with('message','Success Simpan Transaksi');
+        try {
+            DB::transaction(function () use ($userId, $transaction, $validated, $newAmount, $newFee, $newDate, $categoryId, $budgetItemId, $splits) {
+                // 1. Kembalikan efek saldo lama pada rekening asal
+                if ($transaction->savings_id) {
+                    $oldSaving = Saving::where('user_id', $userId)->lockForUpdate()->find($transaction->savings_id);
+                    if ($oldSaving) {
+                        $oldEffect = $transaction->balanceEffect();
+                        $oldSaving->update([
+                            'current_balance' => (float) $oldSaving->current_balance - $oldEffect,
+                        ]);
+                    }
+                }
+
+                // 2. Jika bagian dari pasangan transfer_group_id, sesuaikan juga pasangan transaksinya
+                if ($transaction->transfer_group_id) {
+                    $counterpart = Transaction::where('user_id', $userId)
+                        ->where('transfer_group_id', $transaction->transfer_group_id)
+                        ->where('id', '!=', $transaction->id)
+                        ->first();
+
+                    if ($counterpart) {
+                        if ($counterpart->savings_id) {
+                            $cpSaving = Saving::where('user_id', $userId)->lockForUpdate()->find($counterpart->savings_id);
+                            if ($cpSaving) {
+                                $cpOldEffect = $counterpart->balanceEffect();
+                                $cpBaseBalance = (float) $cpSaving->current_balance - $cpOldEffect;
+                                $cpNewEffect = $counterpart->direction === Transaction::DIRECTION_IN ? $newAmount : -($newAmount + (float) ($counterpart->fee ?? 0));
+
+                                if ($cpBaseBalance + $cpNewEffect < 0) {
+                                    throw new \Exception("Saldo rekening pasangan ({$cpSaving->name}) tidak mencukupi untuk perubahan nominal ini.");
+                                }
+
+                                $cpSaving->update([
+                                    'current_balance' => $cpBaseBalance + $cpNewEffect,
+                                ]);
+                            }
+                        }
+
+                        $counterpart->update([
+                            'amount'           => $newAmount,
+                            'category_id'      => $categoryId,
+                            'transaction_date' => $newDate,
+                        ]);
+                    }
+
+                    $newDirection = $transaction->direction;
+                } else {
+                    $newDirection = $validated['type'] === 'Cash In'
+                        ? Transaction::DIRECTION_IN
+                        : Transaction::DIRECTION_OUT;
+                }
+
+                // 3. Terapkan efek saldo baru pada rekening tujuan/baru
+                $newSaving = Saving::where('user_id', $userId)->lockForUpdate()->findOrFail($validated['savings_id']);
+                $newEffect = $newDirection === Transaction::DIRECTION_IN
+                    ? $newAmount
+                    : -($newAmount + $newFee);
+
+                if ($newDirection === Transaction::DIRECTION_OUT && ((float) $newSaving->current_balance + $newEffect) < 0) {
+                    throw new \Exception("Saldo rekening {$newSaving->name} tidak mencukupi (Sisa: Rp " . number_format($newSaving->current_balance, 0, ',', '.') . ", Dibutuhkan: Rp " . number_format($newAmount + $newFee, 0, ',', '.') . ").");
+                }
+
+                $newSaving->update([
+                    'current_balance' => (float) $newSaving->current_balance + $newEffect,
+                ]);
+
+                // 4. Update data transaksi
+                $transaction->update([
+                    'savings_id'       => $newSaving->id,
+                    'category_id'      => $categoryId,
+                    'budget_item_id'   => $budgetItemId,
+                    'type'             => $validated['type'],
+                    'direction'        => $newDirection,
+                    'description'      => $validated['description'],
+                    'amount'           => $newAmount,
+                    'fee'              => $newFee > 0 ? $newFee : null,
+                    'transaction_date' => $newDate,
+                ]);
+
+                // 5. Sinkronkan item split transaksi jika bukan transfer
+                if (!$transaction->transfer_group_id) {
+                    $transaction->items()->delete();
+                    foreach ($splits as $split) {
+                        $transaction->items()->create($split);
+                    }
+                }
+            });
+
+            return redirect()->back()->with('success', 'Transaksi berhasil diperbarui dan saldo rekening telah disesuaikan!');
+        } catch (\Exception $e) {
+            return redirect()->back()->withInput()->with('error', $e->getMessage());
+        }
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Transaction $transaction)
+    public function destroy($id)
     {
-        //
+        $userId = auth()->id();
+        $transaction = Transaction::where('user_id', $userId)->findOrFail($id);
+
+        try {
+            DB::transaction(function () use ($userId, $transaction) {
+                if ($transaction->transfer_group_id) {
+                    $pairedTransactions = Transaction::where('user_id', $userId)
+                        ->where('transfer_group_id', $transaction->transfer_group_id)
+                        ->get();
+
+                    foreach ($pairedTransactions as $tx) {
+                        if ($tx->savings_id) {
+                            $saving = Saving::where('user_id', $userId)->lockForUpdate()->find($tx->savings_id);
+                            if ($saving) {
+                                $effect = $tx->balanceEffect();
+                                $saving->update([
+                                    'current_balance' => (float) $saving->current_balance - $effect,
+                                ]);
+                            }
+                        }
+                        $tx->delete();
+                    }
+                } else {
+                    if ($transaction->savings_id) {
+                        $saving = Saving::where('user_id', $userId)->lockForUpdate()->find($transaction->savings_id);
+                        if ($saving) {
+                            $effect = $transaction->balanceEffect();
+                            $saving->update([
+                                'current_balance' => (float) $saving->current_balance - $effect,
+                            ]);
+                        }
+                    }
+                    $transaction->delete();
+                }
+            });
+
+            return redirect()->back()->with('success', 'Transaksi berhasil dihapus dan saldo rekening telah dikembalikan!');
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Gagal menghapus transaksi: ' . $e->getMessage());
+        }
     }
 
 
@@ -492,9 +639,17 @@ class TransactionController extends Controller
                     continue;
                 }
 
+                $ruleMatch = app(SmartRuleService::class)->matchDescription(
+                    auth()->id(),
+                    $description,
+                    $transactionDate->format('Y-m-d')
+                );
+
                 Transaction::create([
                     'user_id'          => auth()->id(),
                     'savings_id'       => $saving->id,
+                    'category_id'      => $ruleMatch['category_id'] ?? null,
+                    'budget_item_id'   => $ruleMatch['budget_item_id'] ?? null,
                     'transaction_date' => $transactionDate,
                     'amount'           => $amount,
                     'description'      => $description,
@@ -695,5 +850,60 @@ class TransactionController extends Controller
                 'message' => 'Gagal menyimpan transaksi: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Validasi dan normalisasi baris split transaksi.
+     */
+    protected function parseAndValidateSplits(array $rawSplits, float $totalAmount): array
+    {
+        $parsed = [];
+        $sum = 0.0;
+
+        foreach ($rawSplits as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $rowAmount = isset($row['amount']) ? (float) $row['amount'] : 0.0;
+            $rowCategoryId = !empty($row['category_id']) ? (int) $row['category_id'] : null;
+            $rowBudgetItemId = !empty($row['budget_item_id']) ? (int) $row['budget_item_id'] : null;
+            $rowDesc = isset($row['description']) ? trim((string) $row['description']) : null;
+
+            if ($rowAmount <= 0 && !$rowCategoryId && !$rowBudgetItemId && empty($rowDesc)) {
+                continue;
+            }
+
+            if ($rowAmount <= 0) {
+                throw new \Exception('Setiap baris split transaksi harus memiliki nominal lebih dari Rp 0.');
+            }
+
+            if ($rowBudgetItemId && !$rowCategoryId) {
+                $bItem = \App\Models\BudgetItem::find($rowBudgetItemId);
+                if ($bItem && $bItem->category_id) {
+                    $rowCategoryId = $bItem->category_id;
+                }
+            }
+
+            if (!$rowCategoryId) {
+                throw new \Exception('Setiap baris split transaksi harus memilih kategori.');
+            }
+
+            $sum += $rowAmount;
+            $parsed[] = [
+                'category_id'    => $rowCategoryId,
+                'budget_item_id' => $rowBudgetItemId,
+                'description'    => $rowDesc ?: null,
+                'amount'         => $rowAmount,
+            ];
+        }
+
+        if (!empty($parsed) && abs($sum - $totalAmount) > 0.01) {
+            throw new \Exception(
+                'Total nominal split (Rp ' . number_format($sum, 0, ',', '.') .
+                ') harus sama dengan total transaksi (Rp ' . number_format($totalAmount, 0, ',', '.') . ').'
+            );
+        }
+
+        return $parsed;
     }
 }

@@ -234,3 +234,95 @@ test('saving index responds within 300ms with 50 accounts', function () {
     $response->assertStatus(200);
     expect($elapsed)->toBeLessThan(300);
 })->note('Baseline performance test');
+
+// ─────────────────────────────────────────────
+//  RECONCILE BALANCE & ANALYTICS DETAIL
+// ─────────────────────────────────────────────
+
+test('user can reconcile saving balance and adjustment transaction is created', function () {
+    $user   = User::factory()->create();
+    $saving = Saving::factory()->create([
+        'user_id'         => $user->id,
+        'current_balance' => 1_000_000,
+    ]);
+
+    $response = $this->actingAs($user)->post("/saving/{$saving->id}/reconcile", [
+        'actual_balance' => 850_000,
+        'notes'          => 'Selisih biaya makan & parkir',
+    ]);
+
+    $response->assertRedirect();
+    expect((float) $saving->fresh()->current_balance)->toBe(850_000.0);
+
+    $this->assertDatabaseHas('transactions', [
+        'user_id'     => $user->id,
+        'savings_id'  => $saving->id,
+        'type'        => 'Cash Out',
+        'direction'   => 'out',
+        'amount'      => 150_000,
+        'description' => 'Rekonsiliasi Saldo: Selisih biaya makan & parkir',
+    ]);
+});
+
+test('saving detail filters by daily weekly monthly and date range and computes category breakdown', function () {
+    $user   = User::factory()->create();
+    $saving = Saving::factory()->create(['user_id' => $user->id, 'current_balance' => 5_000_000]);
+
+    $catFood = \App\Models\Category::create([
+        'name'  => 'Makanan & Minuman',
+        'type'  => 'Cash Out',
+        'color' => 'amber',
+        'icon'  => 'fa-utensils',
+    ]);
+
+    Transaction::factory()->create([
+        'user_id'          => $user->id,
+        'savings_id'       => $saving->id,
+        'category_id'      => $catFood->id,
+        'type'             => 'Cash Out',
+        'direction'        => 'out',
+        'description'      => 'Kopi Kenangan',
+        'amount'           => 50_000,
+        'transaction_date' => '2026-11-10',
+    ]);
+
+    Transaction::factory()->create([
+        'user_id'          => $user->id,
+        'savings_id'       => $saving->id,
+        'category_id'      => $catFood->id,
+        'type'             => 'Cash Out',
+        'direction'        => 'out',
+        'description'      => 'Makan Malam Keluarga',
+        'amount'           => 250_000,
+        'transaction_date' => '2026-11-15',
+    ]);
+
+    Transaction::factory()->create([
+        'user_id'          => $user->id,
+        'savings_id'       => $saving->id,
+        'type'             => 'Cash Out',
+        'direction'        => 'out',
+        'description'      => 'Beli Oli Bulan Oktober',
+        'amount'           => 100_000,
+        'transaction_date' => '2026-10-05',
+    ]);
+
+    // 1. Filter Monthly (November 2026)
+    $resMonthly = $this->actingAs($user)->get("/saving/detail/{$saving->id}?period=monthly&month=11&year=2026");
+    $resMonthly->assertStatus(200);
+    expect((float) $resMonthly->viewData('periodSpending'))->toBe(300_000.0);
+    $breakdown = $resMonthly->viewData('spendingByCategory');
+    expect($breakdown)->toHaveCount(1);
+    expect($breakdown->first()['category'])->toBe('Makanan & Minuman');
+    expect((float) $breakdown->first()['total'])->toBe(300_000.0);
+
+    // 2. Filter Daily (2026-11-10)
+    $resDaily = $this->actingAs($user)->get("/saving/detail/{$saving->id}?period=daily&date=2026-11-10");
+    $resDaily->assertStatus(200);
+    expect((float) $resDaily->viewData('periodSpending'))->toBe(50_000.0);
+
+    // 3. Filter Range (2026-11-01 to 2026-11-12)
+    $resRange = $this->actingAs($user)->get("/saving/detail/{$saving->id}?period=range&start_date=2026-11-01&end_date=2026-11-12");
+    $resRange->assertStatus(200);
+    expect((float) $resRange->viewData('periodSpending'))->toBe(50_000.0);
+});

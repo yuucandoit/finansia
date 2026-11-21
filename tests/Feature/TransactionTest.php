@@ -326,3 +326,97 @@ test('duplicate transaction handler correctly detects duplicate for bank account
     $nonDupBank = $handler->findDuplicate($user->id, $otherSaving->id, 'Langganan Netflix Premium', 85000);
     expect($nonDupBank)->toBeNull();
 });
+
+// ─────────────────────────────────────────────
+//  UPDATE & DESTROY + BALANCE RECALCULATION
+// ─────────────────────────────────────────────
+
+test('user can update a transaction and saving balance is recalculated automatically', function () {
+    $user   = User::factory()->create();
+    $saving = Saving::factory()->create([
+        'user_id'         => $user->id,
+        'current_balance' => 1_000_000,
+    ]);
+
+    // Store initial Cash Out of 200,000 -> balance becomes 800,000
+    $this->actingAs($user)->post('/transaksi/store', [
+        'description'      => 'Makan Siang',
+        'type'             => 'Cash Out',
+        'amount'           => 200_000,
+        'savings_id'       => $saving->id,
+        'transaction_date' => '2026-11-18',
+    ]);
+
+    expect((float) $saving->fresh()->current_balance)->toBe(800_000.0);
+
+    $tx = Transaction::where('user_id', $user->id)->first();
+
+    // Update Cash Out from 200,000 to 350,000 -> balance should become 650,000
+    $response = $this->actingAs($user)->put("/transaksi/{$tx->id}", [
+        'description'      => 'Makan Siang + Kopi',
+        'type'             => 'Cash Out',
+        'amount'           => 350_000,
+        'savings_id'       => $saving->id,
+        'transaction_date' => '2026-11-18',
+    ]);
+
+    $response->assertRedirect();
+    expect((float) $saving->fresh()->current_balance)->toBe(650_000.0);
+    expect($tx->fresh()->description)->toBe('Makan Siang + Kopi');
+});
+
+test('user can delete a transaction and saving balance is restored automatically', function () {
+    $user   = User::factory()->create();
+    $saving = Saving::factory()->create([
+        'user_id'         => $user->id,
+        'current_balance' => 2_000_000,
+    ]);
+
+    // Store Cash Out of 500,000 + fee 2,500 -> balance becomes 1,497,500
+    $this->actingAs($user)->post('/transaksi/store', [
+        'description'      => 'Beli Sepatu',
+        'type'             => 'Cash Out',
+        'amount'           => 500_000,
+        'fee'              => 2_500,
+        'savings_id'       => $saving->id,
+        'transaction_date' => '2026-11-18',
+    ]);
+
+    expect((float) $saving->fresh()->current_balance)->toBe(1_497_500.0);
+
+    $tx = Transaction::where('user_id', $user->id)->first();
+
+    // Delete transaction -> balance should return to 2,000,000
+    $response = $this->actingAs($user)->delete("/transaksi/{$tx->id}");
+    $response->assertRedirect();
+
+    expect((float) $saving->fresh()->current_balance)->toBe(2_000_000.0);
+    $this->assertDatabaseMissing('transactions', ['id' => $tx->id]);
+});
+
+test('deleting a paired transfer transaction restores both source and destination balances', function () {
+    $user       = User::factory()->create();
+    $sourceAcct = Saving::factory()->create(['user_id' => $user->id, 'current_balance' => 3_000_000]);
+    $destAcct   = Saving::factory()->create(['user_id' => $user->id, 'current_balance' => 500_000]);
+
+    $this->actingAs($user)->post('/transaksi/store', [
+        'description'            => 'Pindah Dana',
+        'type'                   => 'Transfer',
+        'amount'                 => 1_000_000,
+        'fee'                    => 6_500,
+        'savings_id'             => $sourceAcct->id,
+        'destination_savings_id' => $destAcct->id,
+        'transaction_date'       => '2026-11-18',
+    ]);
+
+    expect((float) $sourceAcct->fresh()->current_balance)->toBe(1_993_500.0);
+    expect((float) $destAcct->fresh()->current_balance)->toBe(1_500_000.0);
+
+    $txOut = Transaction::where('user_id', $user->id)->where('savings_id', $sourceAcct->id)->first();
+
+    $this->actingAs($user)->delete("/transaksi/{$txOut->id}")->assertRedirect();
+
+    expect((float) $sourceAcct->fresh()->current_balance)->toBe(3_000_000.0);
+    expect((float) $destAcct->fresh()->current_balance)->toBe(500_000.0);
+    expect(Transaction::where('user_id', $user->id)->count())->toBe(0);
+});

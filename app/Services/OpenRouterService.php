@@ -15,8 +15,8 @@ class OpenRouterService
     public function __construct()
     {
         $this->apiKey = config('services.openrouter.api_key', env('OPENROUTER_API_KEY'));
-        $this->primaryModel = config('services.openrouter.primary_model', env('OPENROUTER_PRIMARY_MODEL', 'nex-agi/nex-n2.5-mini:free'));
-        $this->fallbackModel = config('services.openrouter.fallback_model', env('OPENROUTER_FALLBACK_MODEL', 'inclusionai/ling-3.0-flash-fin:free'));
+        $this->primaryModel = config('services.openrouter.primary_model', env('OPENROUTER_PRIMARY_MODEL', 'google/gemma-4-26b-a4b-it:free'));
+        $this->fallbackModel = config('services.openrouter.fallback_model', env('OPENROUTER_FALLBACK_MODEL', 'openrouter/free'));
     }
 
     /**
@@ -45,7 +45,7 @@ Aturan Wajib:
 1. Kembalikan HANYA format JSON valid tanpa tanda markdown (tanpa ```json ... ```), tanpa teks pengantar.
 2. Skema JSON:
 {
-  "intent": "RECORD_TRANSACTION" | "RECORD_BUDGET" | "FINANCIAL_QUERY" | "GENERAL_CHAT",
+  "intent": "RECORD_TRANSACTION" | "RECORD_BUDGET" | "RECORD_FUTURE_PLAN" | "FINANCIAL_QUERY" | "FINANCIAL_ADVISOR" | "GENERAL_CHAT",
   "data": {
     "items": [
       // Jika RECORD_TRANSACTION:
@@ -73,8 +73,10 @@ Aturan Wajib:
 3. Skema Intent:
 - "RECORD_TRANSACTION": Jika user ingin mencatat 1 atau lebih transaksi cashflow (contoh: "makan ramen 45rb", "beli kopi 25k dan bensin 30k pake bca", "gaji masuk 5jt"). Isi "data.items" dengan array transaksi.
 - "RECORD_BUDGET": Jika user ingin menetapkan/mengatur/mencatat 1 atau lebih batas anggaran bulanan per kebutuhan (contoh: "atur anggaran makan 1.5jt", "catat budget kontrakan 1.5jt, listrik 300rb, dan sedekah mamah 500rb", "anggaran skincare 300rb"). Berikan "name" sebagai nama pos kebutuhan spesifik (misal: "Kontrakan", "Listrik", "Sedekah Mamah") dan "category" sebagai kategori master standar keuangan (misal: Tempat Tinggal, Utilitas & Tagihan, Keluarga & Sedekah, Belanja, Makanan & Minuman). Isi "data.items" dengan array objek anggaran.
-- "FINANCIAL_QUERY": Jika user bertanya tentang saldo, pengeluaran, sisa kas, perbandingan kategori, ATAU status anggaran bulanan (contoh: "bulan ini jajan makan udah habis berapa?", "sisa saldo berapa?", "apakah budget makan masih aman?"). Set "data": null.
-- "GENERAL_CHAT": Jika sekadar menyapa atau ngobrol umum di luar niat catat atau tanya data keuangan (contoh: "halo", "apa kabar", "siapa kamu"). Set "data": null.
+- "RECORD_FUTURE_PLAN": Jika user meminta dibuatkan rencana masa depan / proyek tabungan / daftar item beserta estimasi biaya & jadwal (contoh: "buatkan rencana rakit PC budget 15jt", "buat future plan nikah 100jt 6 bulan lagi", "rencana liburan ke Bali 8jt bulan depan"). Set "data": null (akan diproses oleh generator rencana).
+- "FINANCIAL_QUERY": Jika user bertanya angka spesifik tentang saldo, pengeluaran, sisa kas, perbandingan kategori, ATAU status anggaran bulanan (contoh: "bulan ini jajan makan udah habis berapa?", "sisa saldo berapa?"). Set "data": null.
+- "FINANCIAL_ADVISOR": Jika user meminta saran, konsultasi, evaluasi kesehatan finansial, strategi menabung, cara hemat, analisis keborosan, strategi pelunasan hutang/piutang, atau kelayakan target Future Plan (contoh: "cek kondisi keuanganku bulan ini", "aku boros di mana ya?", "gimana strategi lunasin hutang?", "apakah target nikahku realistis?"). Set "data": null.
+- "GENERAL_CHAT": Jika sekadar menyapa atau ngobrol umum di luar pencatatan maupun konsultasi keuangan (contoh: "halo", "apa kabar", "siapa kamu"). Set "data": null.
 PROMPT;
 
         if (!empty($this->apiKey)) {
@@ -88,7 +90,7 @@ PROMPT;
 
             if ($response && !isset($response['error'])) {
                 $parsed = $this->cleanAndParseJson($response);
-                if (!empty($parsed) && in_array($parsed['intent'] ?? '', ['RECORD_TRANSACTION', 'RECORD_BUDGET', 'FINANCIAL_QUERY', 'GENERAL_CHAT'])) {
+                if (!empty($parsed) && in_array($parsed['intent'] ?? '', ['RECORD_TRANSACTION', 'RECORD_BUDGET', 'RECORD_FUTURE_PLAN', 'FINANCIAL_QUERY', 'FINANCIAL_ADVISOR', 'GENERAL_CHAT'])) {
                     // Normalisasi struktur items jika model mengembalikan flat data
                     if (isset($parsed['data']) && is_array($parsed['data'])) {
                         if (!isset($parsed['data']['items'])) {
@@ -123,26 +125,43 @@ PROMPT;
     /**
      * Menjawab pertanyaan analisis keuangan pengguna berdasarkan data riil snapshot.
      */
-    public function answerFinancialQuery(string $userMessage, array $financialSnapshot): string
+    public function answerFinancialQuery(string $userMessage, array $financialSnapshot, array $history = []): string
+    {
+        return $this->adviseUser($userMessage, $financialSnapshot, $history);
+    }
+
+    /**
+     * Financial Advisor AI: Berbincang multi-turn dengan pengguna, menganalisis kondisi keuangan riil,
+     * memberikan evaluasi kesehatan finansial, strategi hemat, hutang, dan rencana masa depan.
+     */
+    public function adviseUser(string $userMessage, array $financialSnapshot, array $history = []): string
     {
         $snapshotJson = json_encode($financialSnapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
         $systemPrompt = <<<PROMPT
-Anda adalah asisten keuangan pribadi cerdas untuk Finansia.
-Jawab pertanyaan pengguna HANYA berdasarkan snapshot data keuangan berikut (termasuk saldo, cash flow, dan anggaran bulanan jika ada):
-{$snapshotJson}
+Anda adalah **Finansia Advisor**, penasihat keuangan pribadi profesional, hangat, dan suportif di aplikasi Finansia.
+Tugas Anda adalah berbincang secara interaktif dengan pengguna, menjawab pertanyaan keuangan, serta memberikan saran dan strategi finansial yang praktis berdasarkan data riil pengguna berikut ini:
 
-Aturan Menjawab:
-1. Jawab santai, ramah, to-the-point, dan gunakan format nominal Rupiah yang rapi (contoh: Rp 45.000, Rp 1.500.000).
-2. Jangan pernah mengarang angka. Jika data yang ditanya tidak ada di snapshot, jawab jujur bahwa datanya belum tercatat.
-3. Jika ditanya tentang anggaran atau batas pengeluaran, jelaskan statusnya (aman, waspada, atau overbudget) dan sisa anggaran yang masih bisa dipakai.
+=== DATA KEUANGAN PENGGUNA SAAT INI ===
+{$snapshotJson}
+========================================
+
+Pedoman Finansia Advisor:
+1. Selalu gunakan data riil dari snapshot di atas (saldo rekening, cashflow, savings_rate_persen, rasio_dana_darurat_bulan, pengeluaran_per_kategori, anggaran_bulan_ini, rencana_masa_depan, hutang_piutang, transaksi_rutin_aktif).
+2. Jangan pernah mengarang angka. Jika suatu pos belum ada datanya, sampaikan jujur dengan ramah.
+3. Gunakan format nominal Rupiah yang rapi (contoh: Rp 1.500.000) dan formatting ringan (**tebal** untuk angka/poin penting, daftar poin `- ` agar mudah dibaca di layar HP).
+4. Berikan insight & langkah konkret:
+   - Jika ditanya kondisi keuangan: evaluasi Savings Rate (ideal >= 20%), Dana Darurat (ideal >= 3-6 bulan pengeluaran), dan pos pengeluaran terbesar.
+   - Jika ada anggaran yang overbudget/warning, ingatkan dengan konstruktif.
+   - Jika ada hutang aktif atau Future Plan, bantu susun prioritas alokasi dana bulanan secara realistis.
+5. Gunakan bahasa Indonesia yang santai namun profesional, empatik, dan mengajak berdiskusi (boleh akhiri dengan 1 pertanyaan lanjutan singkat bila relevan).
 PROMPT;
 
         if (!empty($this->apiKey)) {
-            $response = $this->callApi($this->primaryModel, $systemPrompt, $userMessage);
+            $response = $this->callApi($this->primaryModel, $systemPrompt, $userMessage, $history, 0.4);
 
             if (!$response || isset($response['error'])) {
-                $response = $this->callApi($this->fallbackModel, $systemPrompt, $userMessage);
+                $response = $this->callApi($this->fallbackModel, $systemPrompt, $userMessage, $history, 0.4);
             }
 
             $content = $response['choices'][0]['message']['content'] ?? null;
@@ -235,21 +254,33 @@ PROMPT;
         return is_array($decoded) ? $decoded : [];
     }
 
-    protected function callApi(string $model, string $systemPrompt, string $userMessage): ?array
+    protected function callApi(string $model, string $systemPrompt, string $userMessage, array $history = [], float $temperature = 0.1): ?array
     {
         try {
+            $messages = [
+                ['role' => 'system', 'content' => $systemPrompt],
+            ];
+
+            foreach (array_slice($history, -10) as $turn) {
+                if (!empty($turn['role']) && !empty($turn['content']) && in_array($turn['role'], ['user', 'assistant'], true)) {
+                    $messages[] = [
+                        'role'    => $turn['role'],
+                        'content' => (string) $turn['content'],
+                    ];
+                }
+            }
+
+            $messages[] = ['role' => 'user', 'content' => $userMessage];
+
             $res = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->apiKey,
                 'HTTP-Referer'  => config('app.url', 'http://localhost:8000'),
                 'X-Title'       => 'Finansia App',
                 'Content-Type'  => 'application/json',
-            ])->timeout(12)->post('https://openrouter.ai/api/v1/chat/completions', [
-                'model' => $model,
-                'messages' => [
-                    ['role' => 'system', 'content' => $systemPrompt],
-                    ['role' => 'user', 'content' => $userMessage],
-                ],
-                'temperature' => 0.1,
+            ])->timeout(15)->post('https://openrouter.ai/api/v1/chat/completions', [
+                'model'       => $model,
+                'messages'    => $messages,
+                'temperature' => $temperature,
             ]);
 
             if ($res->successful()) {
@@ -259,6 +290,250 @@ PROMPT;
             }
         } catch (\Throwable $e) {
             Log::error('OpenRouter call error: ' . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Generator Future Plan AI: menyusun judul rencana, target tanggal, dan daftar item beserta jadwal Gantt Chart.
+     */
+    public function generateFuturePlan(string $userMessage): array
+    {
+        $today = now()->format('Y-m-d');
+        $defaultTarget = now()->addMonths(3)->format('Y-m-d');
+
+        $systemPrompt = <<<PROMPT
+Anda adalah AI Perencana Keuangan & Proyek (Future Plan Generator) untuk aplikasi Finansia.
+Tanggal hari ini: {$today}.
+
+Tugas Anda: Berdasarkan permintaan pengguna, susun satu **Future Plan** yang realistis, terstruktur menjadi 3 sampai 6 item kebutuhan beserta jadwal linimasa (`start_date` dan `end_date`) untuk Gantt Chart!
+
+Aturan Wajib:
+1. Kembalikan HANYA JSON valid tanpa markdown backtick (tanpa ```json):
+{
+  "title": "string (Judul rencana yang jelas, misal: 'Rencana Rakit PC Gaming')",
+  "description": "string (Deskripsi singkat 1 kalimat)",
+  "target_date": "YYYY-MM-DD (default {$defaultTarget} jika tidak disebut)",
+  "items": [
+    {
+      "title": "string (Nama item/tahap kebutuhan)",
+      "quantity": 1,
+      "unit_price": integer_nominal,
+      "start_date": "YYYY-MM-DD",
+      "end_date": "YYYY-MM-DD",
+      "notes": "string (opsional)"
+    }
+  ],
+  "reply": "string (pesan pengantar singkat yang ramah)"
+}
+2. Pastikan `end_date` selalu >= `start_date`, dan total (`quantity * unit_price`) seluruh item mendekati atau sesuai budget yang disebut pengguna (jika ada).
+PROMPT;
+
+        if (!empty($this->apiKey)) {
+            $response = $this->callApi($this->primaryModel, $systemPrompt, $userMessage, [], 0.3);
+            if (!$response || isset($response['error'])) {
+                $response = $this->callApi($this->fallbackModel, $systemPrompt, $userMessage, [], 0.3);
+            }
+
+            if ($response && !isset($response['error'])) {
+                $parsed = $this->cleanAndParseJson($response);
+                if (!empty($parsed['title']) && !empty($parsed['items']) && is_array($parsed['items'])) {
+                    return $parsed;
+                }
+            }
+        }
+
+        return $this->fallbackFuturePlanGenerator($userMessage);
+    }
+
+    /**
+     * Fallback lokal cerdas untuk Future Plan Generator jika OpenRouter offline.
+     */
+    protected function fallbackFuturePlanGenerator(string $userMessage): array
+    {
+        $lower = strtolower($userMessage);
+
+        // Ekstrak nominal budget (misal 15jt, 100 juta, 500rb)
+        $budget = 10_000_000;
+        if (preg_match('/(\d+(?:[.,]\d+)?)\s*(jt|juta|rb|k|ribu)\b/i', $lower, $m)) {
+            $num = (float) str_replace(',', '.', $m[1]);
+            $unit = strtolower($m[2]);
+            $budget = in_array($unit, ['jt', 'juta'], true) ? (int) round($num * 1_000_000) : (int) round($num * 1_000);
+        }
+
+        // Ekstrak durasi bulan jika disebut
+        $months = 3;
+        if (preg_match('/(\d+)\s*bulan\b/i', $lower, $mm)) {
+            $months = max(1, min(36, (int) $mm[1]));
+        }
+
+        $cleanTitle = preg_replace('/\b(?:buat(?:kan)?|tolong|saya|aku|mau|ingin|rencana|future\s*plan|budget|anggaran|sebesar|senilai|selama|untuk)\b/i', '', $userMessage);
+        $cleanTitle = preg_replace('/\b\d+(?:[.,]\d+)?\s*(?:jt|juta|rb|k|ribu|bulan)\b/i', '', $cleanTitle);
+        $cleanTitle = trim(preg_replace('/\s+/', ' ', $cleanTitle), " \t\n\r\0\x0B,.-:");
+        $planTitle = !empty($cleanTitle) ? 'Rencana ' . ucwords($cleanTitle) : 'Rencana Masa Depan AI';
+
+        $start = now()->startOfDay();
+        $targetDate = $start->copy()->addMonths($months);
+
+        $p1 = (int) round($budget * 0.25);
+        $p2 = (int) round($budget * 0.45);
+        $p3 = max(0, $budget - $p1 - $p2);
+
+        $totalDays = max(14, $start->diffInDays($targetDate));
+        $step1End = $start->copy()->addDays((int) round($totalDays * 0.3));
+        $step2Start = $step1End->copy()->addDay();
+        $step2End = $start->copy()->addDays((int) round($totalDays * 0.7));
+        $step3Start = $step2End->copy()->addDay();
+
+        return [
+            'title'       => $planTitle,
+            'description' => 'Rencana terstruktur otomatis oleh Finansia AI dengan estimasi budget Rp ' . number_format($budget, 0, ',', '.'),
+            'target_date' => $targetDate->format('Y-m-d'),
+            'items'       => [
+                [
+                    'title'      => 'Tahap 1: Persiapan & Riset Kebutuhan',
+                    'quantity'   => 1,
+                    'unit_price' => $p1,
+                    'start_date' => $start->format('Y-m-d'),
+                    'end_date'   => $step1End->format('Y-m-d'),
+                    'notes'      => 'Survei vendor/harga & DP awal',
+                ],
+                [
+                    'title'      => 'Tahap 2: Pembelian Komponen Utama',
+                    'quantity'   => 1,
+                    'unit_price' => $p2,
+                    'start_date' => $step2Start->format('Y-m-d'),
+                    'end_date'   => $step2End->format('Y-m-d'),
+                    'notes'      => 'Alokasi dana terbesar',
+                ],
+                [
+                    'title'      => 'Tahap 3: Penyelesaian & Dana Cadangan',
+                    'quantity'   => 1,
+                    'unit_price' => $p3,
+                    'start_date' => $step3Start->format('Y-m-d'),
+                    'end_date'   => $targetDate->format('Y-m-d'),
+                    'notes'      => 'Pelunasan & biaya tak terduga',
+                ],
+            ],
+            'reply' => "Saya telah menyusun draft **{$planTitle}** lengkap dengan estimasi biaya & jadwal Gantt Chart. Silakan periksa lalu klik **Buat Future Plan**:",
+        ];
+    }
+
+    /**
+     * OCR & Klasifikasi Gambar Keuangan (Screenshot M-Banking, Foto Struk, Foto Slip Gaji).
+     * Menolak gambar di luar 3 kategori tersebut atau yang tidak mengandung nominal transaksi.
+     */
+    public function parseImageReceipt(string $base64DataUri, array $userAccounts = [], array $userCategories = [], string $caption = ''): array
+    {
+        $accountsList = implode(', ', $userAccounts) ?: 'Tunai, Rekening Utama';
+        $categoriesList = implode(', ', $userCategories) ?: 'Makanan & Minuman, Transportasi, Belanja, Tagihan, Gaji, Lainnya';
+        $currentDate = now()->format('Y-m-d');
+
+        $systemPrompt = <<<PROMPT
+Anda adalah AI Vision OCR & Klasifikasi Dokumen Keuangan untuk aplikasi Finansia.
+Tugas Anda:
+1. Periksa gambar yang diunggah pengguna. Tentukan apakah gambar tersebut termasuk salah satu dari 3 kategori VALID berikut DAN mengandung nominal uang/angka transaksi yang jelas:
+   - "mbanking_screenshot" (Screenshot M-Banking / E-Wallet / QRIS / Bukti Transfer / Mutasi)
+   - "receipt" (Foto Struk Belanja / Kasir / Restoran / Nota Pembelian)
+   - "payslip" (Foto Slip Gaji / Bukti Pembayaran Penghasilan)
+2. Jika gambar BUKAN salah satu dari 3 kategori di atas (misalnya selfie, pemandangan, meme, hewan, foto acak, atau tidak mengandung angka nominal transaksi):
+   Kembalikan JSON:
+   {
+     "is_valid": false,
+     "image_category": "other",
+     "image_category_label": "Bukan Dokumen Keuangan",
+     "items": [],
+     "reply": "Maaf, AI tidak dapat memproses gambar ini karena bukan termasuk kategori Screenshot M-Banking, Foto Struk, atau Foto Slip Gaji yang mengandung nominal transaksi."
+   }
+3. Jika gambar VALID:
+   - Tentukan "type": "cash_in" (untuk slip gaji atau transfer masuk) atau "cash_out" (untuk struk belanja, QRIS bayar, atau transfer keluar).
+   - Ekstrak nominal total akhir ("amount" sebagai integer positif tanpa titik/koma), deskripsi ringkas ("description", misal nama merchant/toko atau keterangan transfer), tanggal transaksi ("date" format YYYY-MM-DD, default {$currentDate} jika tidak terbaca), rekening paling cocok dari [{$accountsList}], dan kategori paling cocok dari [{$categoriesList}].
+   - Kembalikan JSON valid TANPA backtick markdown:
+   {
+     "is_valid": true,
+     "image_category": "mbanking_screenshot" | "receipt" | "payslip",
+     "image_category_label": "Screenshot M-Banking" | "Foto Struk" | "Foto Slip Gaji",
+     "items": [
+       {
+         "type": "cash_out" | "cash_in",
+         "amount": 125000,
+         "account_name": "string",
+         "category": "string",
+         "description": "string",
+         "date": "YYYY-MM-DD"
+       }
+     ],
+     "reply": "string (ringkasan singkat hasil deteksi OCR, misal: 'Terdeteksi Foto Struk Indomaret sebesar Rp 125.000. Silakan konfirmasi detail di bawah ini:')"
+   }
+PROMPT;
+
+        $userPrompt = !empty($caption)
+            ? "Analisa gambar ini. Catatan tambahan pengguna: {$caption}"
+            : "Analisa gambar ini dan ekstrak data transaksinya jika termasuk kategori dokumen keuangan.";
+
+        if (empty($this->apiKey)) {
+            return [
+                'is_valid'             => false,
+                'image_category'       => 'other',
+                'image_category_label' => 'API Key Belum Tersedia',
+                'items'                => [],
+                'reply'                => 'Maaf, fitur OCR gambar membutuhkan koneksi OpenRouter Vision API yang aktif.',
+            ];
+        }
+
+        $response = $this->callVisionApi($this->primaryModel, $systemPrompt, $userPrompt, $base64DataUri);
+        if (!$response || isset($response['error'])) {
+            Log::warning('OpenRouter Vision primary model failed, switching to fallback.');
+            $response = $this->callVisionApi($this->fallbackModel, $systemPrompt, $userPrompt, $base64DataUri);
+        }
+
+        if ($response && !isset($response['error'])) {
+            $parsed = $this->cleanAndParseJson($response);
+            if (!empty($parsed) && array_key_exists('is_valid', $parsed)) {
+                return $parsed;
+            }
+        }
+
+        return [
+            'is_valid'             => false,
+            'image_category'       => 'other',
+            'image_category_label' => 'Tidak Terdeteksi',
+            'items'                => [],
+            'reply'                => 'AI tidak bisa memproses gambar ini karena tidak terdeteksi sebagai Screenshot M-Banking, Foto Struk, atau Foto Slip Gaji yang valid.',
+        ];
+    }
+
+    protected function callVisionApi(string $model, string $systemPrompt, string $userText, string $base64DataUri): ?array
+    {
+        try {
+            $res = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'HTTP-Referer'  => config('app.url', 'http://localhost:8000'),
+                'X-Title'       => 'Finansia App',
+                'Content-Type'  => 'application/json',
+            ])->timeout(25)->post('https://openrouter.ai/api/v1/chat/completions', [
+                'model'    => $model,
+                'messages' => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    [
+                        'role'    => 'user',
+                        'content' => [
+                            ['type' => 'text', 'text' => $userText],
+                            ['type' => 'image_url', 'image_url' => ['url' => $base64DataUri]],
+                        ],
+                    ],
+                ],
+                'temperature' => 0.1,
+            ]);
+
+            if ($res->successful()) {
+                return $res->json();
+            }
+
+            Log::warning('OpenRouter Vision API returned non-200: ' . $res->status() . ' - ' . $res->body());
+        } catch (\Throwable $e) {
+            Log::error('OpenRouter Vision call error: ' . $e->getMessage());
         }
 
         return null;
@@ -289,9 +564,36 @@ PROMPT;
     {
         $lowerMsg = strtolower($message);
 
-        // 1. Deteksi Pertanyaan Finansial (FINANCIAL_QUERY)
-        $isFinancialQuery = preg_match('/\b(?:berapa|habis berapa|sisa|cek|total|kondisi|rekap|ringkasan|pengeluaran terbesar|aman gak|aman ga|masih aman)\b/i', $lowerMsg)
-            && preg_match('/\b(?:saldo|uang|kas|pengeluaran|pemasukan|jajan|makan|kategori|belanja|bulan ini|anggaran|budget)\b/i', $lowerMsg);
+        // 0. Deteksi Pembuatan Future Plan AI (RECORD_FUTURE_PLAN)
+        $isFuturePlanRequest = preg_match('/\b(?:buat(?:kan)?|bikin|susun)\b/i', $lowerMsg)
+            && preg_match('/\b(?:future\s*plan|rencana\s+(?!anggaran|budget)|proyek)\b/i', $lowerMsg);
+
+        if ($isFuturePlanRequest) {
+            return [
+                'intent' => 'RECORD_FUTURE_PLAN',
+                'data'   => null,
+                'reply'  => 'Pembuatan Future Plan terdeteksi.',
+            ];
+        }
+
+        // 1. Deteksi Konsultasi Financial Advisor (FINANCIAL_ADVISOR)
+        $hasRecordingAction = preg_match('/\b(?:atur|buat|catat(?:kan)?|pasang|tetapkan|tambah(?:kan)?|masukkan|beli|bayar|gaji|masuk)\b/is', $lowerMsg)
+            && preg_match('/\d+\s*(?:rb|k|ribu|rebu|jt|juta|000)\b/i', $lowerMsg);
+
+        $isAdvisorQuery = !$hasRecordingAction
+            && preg_match('/\b(?:saran|advisor|konsultasi|evaluasi|kesehatan\s+finansial|keuangan|boros|hemat|menabung|nabung|strategi|prioritas|lunasin|hutang|piutang|future\s*plan|rencana\s+masa\s+depan|dana\s+darurat|gimana\s+kondisi|menurutmu|sehat\s+gak|sehat\s+ga|cukup\s+gak|cukup\s+ga)\b/i', $lowerMsg);
+
+        if ($isAdvisorQuery) {
+            return [
+                'intent' => 'FINANCIAL_ADVISOR',
+                'data'   => null,
+                'reply'  => 'Konsultasi financial advisor terdeteksi.',
+            ];
+        }
+
+        // 2. Deteksi Pertanyaan Finansial Spesifik (FINANCIAL_QUERY)
+        $isFinancialQuery = preg_match('/\b(?:berapa|habis berapa|sisa|cek|total|kondisi|rekap|ringkasan|sebutkan|daftar|list|top\s*\d*|terbesar|terbanyak|tertinggi|apa\s+aja|apa\s+saja|mana\s+yang|aman gak|aman ga|masih aman)\b/i', $lowerMsg)
+            && preg_match('/\b(?:saldo|uang|kas|pengeluaran|pemasukan|transaksi|jajan|makan|kategori|belanja|bulan ini|minggu ini|hari ini|kemarin|anggaran|budget|rekening|tabungan)\b/i', $lowerMsg);
 
         if ($isFinancialQuery) {
             return [
@@ -816,6 +1118,82 @@ PROMPT;
     }
 
     /**
+     * Ekstrak parameter query database dinamis dari pertanyaan user (tanpa hardcode angka/periode tetap).
+     */
+    public function extractDynamicQueryParams(string $userMessage, array $userAccounts = [], array $userCategories = []): ?array
+    {
+        $lower = strtolower($userMessage);
+
+        $wantsSpecificData = preg_match('/\b(?:top\s*\d+|sebutkan|daftar|list|cari|tampilkan|terbesar|tertinggi|termahal|di\s+atas|lebih\s+dari|bulan\s+lalu|minggu\s+lalu|tahun\s+ini|kemarin|hari\s+ini)\b/i', $lower);
+        if (!$wantsSpecificData) {
+            return null;
+        }
+
+        $params = [
+            'type'    => str_contains($lower, 'pemasukan') || str_contains($lower, 'gaji') ? 'Cash In' : 'Cash Out',
+            'sort_by' => 'amount_desc',
+            'limit'   => 5,
+        ];
+
+        // Dynamic limit: "top 3", "top 7", "10 pengeluaran", etc.
+        if (preg_match('/\b(?:top|tampilkan|sebutkan)\s+(\d{1,2})\b/i', $lower, $m)) {
+            $params['limit'] = max(1, min(20, (int) $m[1]));
+        }
+
+        // Dynamic date range
+        if (str_contains($lower, 'hari ini')) {
+            $params['date_from'] = now()->toDateString();
+            $params['date_to'] = now()->toDateString();
+        } elseif (str_contains($lower, 'kemarin')) {
+            $params['date_from'] = now()->subDay()->toDateString();
+            $params['date_to'] = now()->subDay()->toDateString();
+        } elseif (str_contains($lower, 'minggu ini')) {
+            $params['date_from'] = now()->startOfWeek(Carbon::MONDAY)->toDateString();
+            $params['date_to'] = now()->endOfWeek(Carbon::SUNDAY)->toDateString();
+        } elseif (str_contains($lower, 'minggu lalu')) {
+            $params['date_from'] = now()->subWeek()->startOfWeek(Carbon::MONDAY)->toDateString();
+            $params['date_to'] = now()->subWeek()->endOfWeek(Carbon::SUNDAY)->toDateString();
+        } elseif (str_contains($lower, 'bulan lalu')) {
+            $params['date_from'] = now()->subMonthNoOverflow()->startOfMonth()->toDateString();
+            $params['date_to'] = now()->subMonthNoOverflow()->endOfMonth()->toDateString();
+        } elseif (str_contains($lower, 'tahun ini')) {
+            $params['date_from'] = now()->startOfYear()->toDateString();
+            $params['date_to'] = now()->endOfYear()->toDateString();
+        } else {
+            // Default: bulan ini
+            $params['date_from'] = now()->startOfMonth()->toDateString();
+            $params['date_to'] = now()->endOfMonth()->toDateString();
+        }
+
+        // Dynamic account filter
+        foreach ($userAccounts as $acc) {
+            if (!empty($acc) && str_contains($lower, strtolower($acc))) {
+                $params['account'] = $acc;
+                break;
+            }
+        }
+
+        // Dynamic category filter
+        foreach ($userCategories as $cat) {
+            if (!empty($cat) && str_contains($lower, strtolower($cat))) {
+                $params['category'] = $cat;
+                break;
+            }
+        }
+
+        // Dynamic min_amount filter: "di atas 500rb", "lebih dari 1jt"
+        if (preg_match('/(?:di\s*atas|lebih\s+dari|>)\s*(?:rp\.?\s*)?(\d+(?:[.,]\d+)?)\s*(rb|k|ribu|jt|juta)?/i', $lower, $am)) {
+            $num = (float) str_replace(',', '.', $am[1]);
+            $unit = strtolower($am[2] ?? '');
+            if (in_array($unit, ['rb', 'k', 'ribu'], true)) $num *= 1000;
+            elseif (in_array($unit, ['jt', 'juta'], true)) $num *= 1000000;
+            $params['min_amount'] = (int) $num;
+        }
+
+        return $params;
+    }
+
+    /**
      * Menjawab pertanyaan finansial secara langsung jika AI eksternal sedang offline.
      */
     protected function fallbackFinancialAnswer(string $userMessage, array $snapshot): string
@@ -858,12 +1236,136 @@ PROMPT;
             return "Total saldo kamu saat ini di semua rekening adalah {$totalSaldo}.";
         }
 
+        // Jika ada hasil query dinamis dari database, tampilkan langsung hasil akuratnya
+        if (!empty($snapshot['hasil_query_dinamis'])) {
+            $dq = $snapshot['hasil_query_dinamis'];
+            $rows = $dq['hasil_daftar'] ?? [];
+            $totalMatched = $dq['total_transaksi_cocok'] ?? 0;
+            $totalNominal = 'Rp ' . number_format($dq['total_nominal'] ?? 0, 0, ',', '.');
+
+            if (empty($rows)) {
+                return "Tidak ditemukan transaksi yang cocok pada rentang waktu/filter tersebut.";
+            }
+
+            $listLines = ["📊 **Hasil Data Transaksi ({$totalMatched} transaksi ditemukan, Total: {$totalNominal}):**"];
+            foreach ($rows as $idx => $tx) {
+                $num = $idx + 1;
+                $nom = 'Rp ' . number_format($tx['amount'] ?? 0, 0, ',', '.');
+                $cat = $tx['category'] ?? 'Lainnya';
+                $acc = $tx['rekening'] ?? '-';
+                $tgl = $tx['transaction_date'] ?? '-';
+                $listLines[] = "- **#{$num} {$tx['description']}** — **{$nom}** ({$cat} • {$acc} • {$tgl})";
+            }
+
+            return implode("\n", $listLines);
+        }
+
+        // Pertanyaan Top Pengeluaran / Terbesar (misal: "sebutkan top 5 pengeluaran bulan ini")
+        if (preg_match('/\b(?:top|terbesar|tertinggi|sebutkan|daftar|list)\b/i', $lower) && (str_contains($lower, 'pengeluaran') || str_contains($lower, 'belanja') || str_contains($lower, 'transaksi'))) {
+            $top5 = $snapshot['top_5_pengeluaran_bulan_ini'] ?? [];
+            if (empty($top5)) {
+                return "Belum ada catatan pengeluaran untuk {$periode}.";
+            }
+
+            $listLines = ["🔥 **Top " . count($top5) . " Pengeluaran Terbesar ({$periode}):**"];
+            foreach ($top5 as $idx => $tx) {
+                $num = $idx + 1;
+                $nom = 'Rp ' . number_format($tx['amount'] ?? 0, 0, ',', '.');
+                $cat = $tx['category'] ?? 'Lainnya';
+                $tgl = $tx['transaction_date'] ?? '-';
+                $listLines[] = "- **#{$num} {$tx['description']}** — **{$nom}** ({$cat} • {$tgl})";
+            }
+
+            return implode("\n", $listLines);
+        }
+
+        // Pertanyaan Top Pemasukan
+        if (preg_match('/\b(?:top|terbesar|tertinggi|sebutkan|daftar|list)\b/i', $lower) && str_contains($lower, 'pemasukan')) {
+            $top5In = $snapshot['top_5_pemasukan_bulan_ini'] ?? [];
+            if (empty($top5In)) {
+                return "Belum ada catatan pemasukan untuk {$periode}.";
+            }
+
+            $listLines = ["💰 **Top " . count($top5In) . " Pemasukan Terbesar ({$periode}):**"];
+            foreach ($top5In as $idx => $tx) {
+                $num = $idx + 1;
+                $nom = 'Rp ' . number_format($tx['amount'] ?? 0, 0, ',', '.');
+                $tgl = $tx['transaction_date'] ?? '-';
+                $listLines[] = "- **#{$num} {$tx['description']}** — **{$nom}** ({$tgl})";
+            }
+
+            return implode("\n", $listLines);
+        }
+
+        // Pertanyaan pengeluaran minggu ini
+        if (str_contains($lower, 'minggu ini') && (str_contains($lower, 'pengeluaran') || str_contains($lower, 'habis'))) {
+            $weekly = 'Rp ' . number_format($snapshot['cashflow_bulan_ini']['pengeluaran_minggu_ini'] ?? 0, 0, ',', '.');
+            return "Total pengeluaran kamu minggu ini sebesar **{$weekly}**.";
+        }
+
         // Pertanyaan pengeluaran total
         if (str_contains($lower, 'pengeluaran') || str_contains($lower, 'habis berapa')) {
             return "{$periode} total pengeluaranmu sebesar {$pengeluaran}. Total pemasukanmu {$pemasukan}, sehingga sisa kas bulan ini {$sisaKas}.";
         }
 
-        return "Ringkasan keuanganmu ({$periode}): Total saldo {$totalSaldo}, pemasukan {$pemasukan}, dan pengeluaran {$pengeluaran}.";
+        // Pertanyaan spesifik tentang "boros di mana" / "pos terbesar"
+        if (str_contains($lower, 'boros') || str_contains($lower, 'menguras')) {
+            $categories = $snapshot['pengeluaran_per_kategori'] ?? [];
+            $top5 = $snapshot['top_5_pengeluaran_bulan_ini'] ?? [];
+
+            $lines = ["💡 **Analisis Keborosan & Strategi Hemat ({$periode}):**"];
+            if (!empty($categories)) {
+                $idx = 1;
+                foreach (array_slice($categories, 0, 3, true) as $catName => $catVal) {
+                    $lines[] = "- **Kategori #{$idx} ({$catName})**: Rp " . number_format($catVal, 0, ',', '.');
+                    $idx++;
+                }
+            }
+            if (!empty($top5)) {
+                $biggest = $top5[0];
+                $lines[] = "- **Transaksi Terbesar**: {$biggest['description']} (**Rp " . number_format($biggest['amount'], 0, ',', '.') . "**)";
+            }
+            $lines[] = "\n🎯 **Strategi Hemat**: Pasang batas anggaran di menu **Anggaran** pada kategori terbesar di atas, dan sisihkan tabungan di awal gajian sebelum dibelanjakan.";
+            return implode("\n", $lines);
+        }
+
+        // Analisis & Saran Financial Advisor Komprehensif
+        $health = $snapshot['kesehatan_finansial'] ?? [];
+        $savingsRate = $health['savings_rate_persen'] ?? 0;
+        $runway = $health['rasio_dana_darurat_bulan'] ?? 0;
+        $categories = $snapshot['pengeluaran_per_kategori'] ?? [];
+        $topCategory = !empty($categories) ? array_key_first($categories) : null;
+        $topCatAmount = $topCategory ? 'Rp ' . number_format($categories[$topCategory], 0, ',', '.') : 'Rp 0';
+
+        $plans = $snapshot['rencana_masa_depan'] ?? [];
+        $debts = $snapshot['hutang_piutang'] ?? [];
+        $totalHutang = (int) ($debts['total_sisa_hutang'] ?? 0);
+
+        $lines = [];
+        $lines[] = "🩺 **Evaluasi Finansia Advisor ({$periode})**";
+        $lines[] = "- **Total Saldo**: {$totalSaldo} (estimasi dana darurat **{$runway} bulan** pengeluaran)";
+        $lines[] = "- **Arus Kas Bulan Ini**: Masuk {$pemasukan} | Keluar {$pengeluaran} | Savings Rate **{$savingsRate}%**";
+
+        if ($topCategory) {
+            $lines[] = "- **Pos Pengeluaran Terbesar**: {$topCategory} ({$topCatAmount})";
+        }
+
+        if ($totalHutang > 0) {
+            $lines[] = "- **Kewajiban Hutang Aktif**: Rp " . number_format($totalHutang, 0, ',', '.') . " — prioritaskan melunasi hutang yang mendekati jatuh tempo terlebih dahulu.";
+        }
+
+        if (!empty($plans)) {
+            $firstPlan = $plans[0];
+            $lines[] = "- **Target Future Plan**: \"{$firstPlan['judul']}\" (sisa kebutuhan Rp " . number_format($firstPlan['sisa_kebutuhan'], 0, ',', '.') . ", progres {$firstPlan['progres_persen']}%).";
+        }
+
+        $advice = $savingsRate >= 20
+            ? "✅ **Saran**: Savings rate Anda sudah sehat (≥ 20%). Pertahankan dan alokasikan surplus kas ke Sinking Fund Future Plan atau dana darurat!"
+            : "⚠️ **Saran**: Savings rate masih di bawah 20%. Coba evaluasi pengeluaran pada pos terbesar ({$topCategory}) dan pasang batas anggaran bulanan agar arus kas tetap positif.";
+
+        $lines[] = "\n{$advice}";
+
+        return implode("\n", $lines);
     }
 
     /**

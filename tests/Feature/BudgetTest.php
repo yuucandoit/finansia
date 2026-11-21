@@ -567,3 +567,44 @@ test('drilldown endpoint returns transactions attached to budget item via web an
         ->assertJsonCount(1, 'data.transactions')
         ->assertJsonPath('data.transactions.0.description', 'Kopi Kenangan');
 });
+
+test('budget index highlights overbudget and warning items alerts', function () {
+    $user = User::factory()->create();
+    $saving = Saving::factory()->create(['user_id' => $user->id]);
+    $cat1 = Category::create(['name' => 'Makan Luar', 'type' => 'Cash Out']);
+    $cat2 = Category::create(['name' => 'Transport Harian', 'type' => 'Cash Out']);
+
+    $posOver = Budget::upsertBudget($user->id, 'Makan Luar', $cat1->id, 11, 2026, 1_000_000);
+    $posWarn = Budget::upsertBudget($user->id, 'Transport Harian', $cat2->id, 11, 2026, 1_000_000);
+
+    // Over-budget: 1,200,000 > 1,000,000
+    Transaction::create([
+        'user_id'          => $user->id,
+        'savings_id'       => $saving->id,
+        'category_id'      => $cat1->id,
+        'budget_item_id'   => $posOver->id,
+        'type'             => 'Cash Out',
+        'amount'           => 1_200_000,
+        'transaction_date' => Carbon::create(2026, 11, 10),
+        'description'      => 'Traktir Tim',
+    ]);
+
+    // Warning (>= 80%): 850,000 / 1,000,000
+    Transaction::create([
+        'user_id'          => $user->id,
+        'savings_id'       => $saving->id,
+        'category_id'      => $cat2->id,
+        'budget_item_id'   => $posWarn->id,
+        'type'             => 'Cash Out',
+        'amount'           => 850_000,
+        'transaction_date' => Carbon::create(2026, 11, 12),
+        'description'      => 'Bensin & Tol',
+    ]);
+
+    $response = $this->actingAs($user)->get('/anggaran?month=11&year=2026');
+    $response->assertStatus(200);
+    $response->assertSee('Peringatan Over-Budget');
+    $response->assertSee('Anggaran Hampir Habis');
+    expect($response->viewData('overBudgetItems'))->toHaveCount(1);
+    expect($response->viewData('warningBudgetItems'))->toHaveCount(1);
+});

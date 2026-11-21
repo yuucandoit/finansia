@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Transaction extends Model
 {
@@ -100,5 +101,17 @@ class Transaction extends Model
     public function budgetItem(): BelongsTo
     {
         return $this->belongsTo(BudgetItem::class, 'budget_item_id');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(TransactionItem::class, 'transaction_id');
+    }
+
+    public function isSplit(): bool
+    {
+        return $this->relationLoaded('items')
+            ? $this->items->isNotEmpty()
+            : $this->items()->exists();
     }
 }

@@ -227,9 +227,20 @@
                                         {{ $item->savingAccount->name ?? 'Tanpa Rekening' }}
                                     </span>
                                     @if(!$isTransfer && !$isTabungan)
-                                        <span style="background-color: {{ $c['bg'] }}; color: {{ $c['text'] }}; border-color: {{ $c['border'] }};" class="px-2 py-0.5 border rounded text-[10px] font-semibold">
-                                            {{ $item->category->name ?? 'Lainnya' }}
-                                        </span>
+                                        @if($item->items->isNotEmpty())
+                                            <span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-bold">
+                                                Split ({{ $item->items->count() }} pos)
+                                            </span>
+                                            @foreach($item->items as $sItem)
+                                                <span class="px-2 py-0.5 bg-gray-50 text-gray-600 border border-gray-200 rounded text-[10px]">
+                                                    {{ $sItem->category?->name ?? 'Lainnya' }}: Rp {{ number_format($sItem->amount, 0, ',', '.') }}
+                                                </span>
+                                            @endforeach
+                                        @else
+                                            <span style="background-color: {{ $c['bg'] }}; color: {{ $c['text'] }}; border-color: {{ $c['border'] }};" class="px-2 py-0.5 border rounded text-[10px] font-semibold">
+                                                {{ $item->category->name ?? 'Lainnya' }}
+                                            </span>
+                                        @endif
                                     @endif
                                     <span>•</span>
                                     <span>{{ $item->created_at->format('H:i') }} WIB</span>
@@ -237,10 +248,46 @@
                             </div>
                         </div>
 
-                        <div class="flex-shrink-0 text-right ml-2">
-                            <p class="font-bold {{ $amountColor }} text-lg">
-                                {{ $amountPrefix }} Rp {{ number_format($item->amount, 0, ',', '.') }}
-                            </p>
+                        <div class="flex-shrink-0 flex items-center gap-3 ml-2">
+                            <div class="text-right">
+                                <p class="font-bold {{ $amountColor }} text-lg">
+                                    {{ $amountPrefix }} Rp {{ number_format($item->amount, 0, ',', '.') }}
+                                </p>
+                                @if(($item->fee ?? 0) > 0)
+                                    <p class="text-[11px] text-gray-400">Biaya admin: Rp {{ number_format($item->fee, 0, ',', '.') }}</p>
+                                @endif
+                            </div>
+                            <div class="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                @php
+                                    $txPayload = [
+                                        'id' => $item->id,
+                                        'description' => $item->description,
+                                        'type' => $item->type,
+                                        'amount' => (float) $item->amount,
+                                        'fee' => (float) ($item->fee ?? 0),
+                                        'savings_id' => $item->savings_id,
+                                        'category_id' => $item->category_id,
+                                        'budget_item_id' => $item->budget_item_id,
+                                        'transaction_date' => \Carbon\Carbon::parse($item->transaction_date)->format('Y-m-d'),
+                                    ];
+                                @endphp
+                                <button type="button"
+                                    onclick='openEditTxModal(@json($txPayload))'
+                                    class="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
+                                    title="Edit Transaksi">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                                    </svg>
+                                </button>
+                                <button type="button"
+                                    onclick="openDeleteTxModal({{ $item->id }}, {{ json_encode($item->description) }}, '{{ number_format($item->amount, 0, ',', '.') }}')"
+                                    class="p-2 text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                                    title="Hapus Transaksi">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -386,8 +433,12 @@
 
                     <!-- Deskripsi -->
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">Deskripsi Transaksi <span class="text-red-500">*</span></label>
-                        <input type="text" name="description" required placeholder="Contoh: Gaji Bulanan, Beli Kopi, dll" 
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="block text-sm font-semibold text-gray-700">Deskripsi Transaksi <span class="text-red-500">*</span></label>
+                            <span id="smart-rule-hint" class="hidden text-[11px] font-bold px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700"></span>
+                        </div>
+                        <input type="text" name="description" id="form-description-input" required placeholder="Contoh: Gaji Bulanan, Beli Kopi, dll"
+                               oninput="debouncedAutoSuggestCategory(this.value)"
                                class="w-full border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 border transition-all">
                     </div>
 
@@ -406,6 +457,33 @@
                             <label class="block text-sm font-semibold text-gray-700 mb-2">Tanggal</label>
                             <input type="date" name="transaction_date" value="{{ date('Y-m-d') }}"
                                    class="w-full border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 border transition-all">
+                        </div>
+                    </div>
+
+                    <!-- Toggle Split Transaksi -->
+                    <div id="split-toggle-wrapper" class="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-indigo-50/60 border border-indigo-100">
+                        <div>
+                            <p class="text-xs font-bold text-indigo-900">Pecah Kategori (Split Transaksi)</p>
+                            <p class="text-[11px] text-indigo-600">Bagi 1 struk ke beberapa kategori / pos anggaran</p>
+                        </div>
+                        <button type="button" id="btn-toggle-split" onclick="toggleSplitMode()"
+                                class="px-3 py-1.5 rounded-lg text-xs font-bold bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition">
+                            Aktifkan Split
+                        </button>
+                    </div>
+
+                    <!-- Split Builder Box -->
+                    <div id="split-builder-box" class="hidden space-y-3 p-3.5 rounded-2xl bg-gray-50 border border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-gray-700">Rincian Split Transaksi</span>
+                            <button type="button" onclick="addSplitRow()" class="text-xs font-bold text-indigo-600 hover:text-indigo-800">
+                                + Tambah Baris
+                            </button>
+                        </div>
+                        <div id="split-rows-container" class="space-y-2.5"></div>
+                        <div class="flex items-center justify-between pt-2 border-t border-gray-200 text-xs">
+                            <span class="text-gray-500">Total Split: <strong id="split-sum-label" class="text-gray-800">Rp 0</strong></span>
+                            <span id="split-diff-label" class="font-bold text-gray-500"></span>
                         </div>
                     </div>
 
@@ -587,6 +665,126 @@
                             📤 Import Transaksi
                         </button>
                     </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Edit Transaksi -->
+    <div id="modal-edit" class="fixed inset-0 z-50 hidden overflow-y-auto">
+        <div class="flex items-end sm:items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity bg-black bg-opacity-50 backdrop-blur-sm" onclick="toggleModal('modal-edit')"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+
+            <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-2xl rounded-t-3xl sm:rounded-3xl animate-slide-up sm:animate-none">
+                <div class="flex items-center justify-between mb-5">
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-800">Edit Transaksi</h3>
+                        <p class="text-xs text-gray-500 mt-0.5">Perubahan otomatis menyesuaikan saldo rekening</p>
+                    </div>
+                    <button type="button" onclick="toggleModal('modal-edit')" class="text-gray-400 hover:text-gray-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <form id="form-edit-tx" method="POST" class="space-y-4">
+                    @csrf
+                    @method('PUT')
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tipe Transaksi</label>
+                            <select name="type" id="edit-type" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                                <option value="Cash Out">Pengeluaran (Cash Out)</option>
+                                <option value="Cash In">Pemasukan (Cash In)</option>
+                                <option value="Transfer">Transfer</option>
+                                <option value="Tabungan">Tabungan</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tanggal</label>
+                            <input type="date" name="transaction_date" id="edit-date" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Deskripsi</label>
+                        <input type="text" name="description" id="edit-description" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Nominal (Rp)</label>
+                            <input type="number" name="amount" id="edit-amount" min="0" step="0.01" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Biaya Admin / Fee (Opsional)</label>
+                            <input type="number" name="fee" id="edit-fee" min="0" step="0.01" placeholder="0" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Rekening / Tabungan</label>
+                            <select name="savings_id" id="edit-savings-id" required class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                                @foreach($saving as $item)
+                                    <option value="{{ $item->id }}">{{ $item->name }} (Rp {{ number_format($item->current_balance, 0, ',', '.') }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Kategori</label>
+                            <select name="category_id" id="edit-category-id" class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                                <option value="">-- Tanpa Kategori --</option>
+                                @foreach($categories as $cat)
+                                    <option value="{{ $cat->id }}">{{ $cat->name }} ({{ $cat->type }})</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="pt-3 flex gap-3">
+                        <button type="button" onclick="toggleModal('modal-edit')" class="flex-1 px-4 py-3 border border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-all">
+                            Batal
+                        </button>
+                        <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">
+                            Simpan Perubahan
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Hapus Transaksi -->
+    <div id="modal-delete-tx" class="fixed inset-0 z-50 hidden overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 transition-opacity bg-black bg-opacity-50 backdrop-blur-sm" onclick="toggleModal('modal-delete-tx')"></div>
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+
+            <div class="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-center align-middle transition-all transform bg-white shadow-2xl rounded-3xl">
+                <div class="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-7 h-7 text-red-600">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                </div>
+                <h3 class="text-lg font-bold text-gray-800 mb-1">Hapus Transaksi Ini?</h3>
+                <p class="text-sm text-gray-500 mb-2">Transaksi <strong id="delete-tx-desc" class="text-gray-800"></strong> sebesar <strong id="delete-tx-amount" class="text-red-600"></strong> akan dihapus.</p>
+                <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-2.5 mb-5">
+                    Saldo rekening terkait akan otomatis dikembalikan sesuai nominal transaksi ini.
+                </p>
+
+                <form id="form-delete-tx" method="POST" class="flex gap-3">
+                    @csrf
+                    @method('DELETE')
+                    <button type="button" onclick="toggleModal('modal-delete-tx')" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-xl font-semibold text-sm transition-all">
+                        Batal
+                    </button>
+                    <button type="submit" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-red-200 transition-all">
+                        Ya, Hapus
+                    </button>
                 </form>
             </div>
         </div>
@@ -799,6 +997,31 @@
         }
     }
 
+    function openEditTxModal(tx) {
+        const form = document.getElementById('form-edit-tx');
+        form.action = '/transaksi/' + tx.id;
+
+        document.getElementById('edit-type').value = tx.type || 'Cash Out';
+        document.getElementById('edit-date').value = tx.transaction_date || '';
+        document.getElementById('edit-description').value = tx.description || '';
+        document.getElementById('edit-amount').value = tx.amount || 0;
+        document.getElementById('edit-fee').value = tx.fee || '';
+        document.getElementById('edit-savings-id').value = tx.savings_id || '';
+        document.getElementById('edit-category-id').value = tx.category_id || '';
+
+        toggleModal('modal-edit');
+    }
+
+    function openDeleteTxModal(id, description, formattedAmount) {
+        const form = document.getElementById('form-delete-tx');
+        form.action = '/transaksi/' + id;
+
+        document.getElementById('delete-tx-desc').textContent = description;
+        document.getElementById('delete-tx-amount').textContent = 'Rp ' + formattedAmount;
+
+        toggleModal('modal-delete-tx');
+    }
+
     // On Load
     document.addEventListener("DOMContentLoaded", function() {
         const urlParams = new URLSearchParams(window.location.search);
@@ -812,5 +1035,152 @@
         // Set up formatting
         setupCurrencyFormatting('nominal-formatted', 'nominal-raw');
         setupCurrencyFormatting('fee-formatted', 'fee-raw');
+
+        const nominalRaw = document.getElementById('nominal-raw');
+        const nominalFmt = document.getElementById('nominal-formatted');
+        if (nominalFmt) {
+            nominalFmt.addEventListener('input', updateSplitSummary);
+        }
+        if (nominalRaw) {
+            nominalRaw.addEventListener('change', updateSplitSummary);
+        }
     });
+
+    // Smart Rules Auto-Suggest
+    let _suggestTimer = null;
+    function debouncedAutoSuggestCategory(desc) {
+        clearTimeout(_suggestTimer);
+        const hintEl = document.getElementById('smart-rule-hint');
+        if (!desc || desc.trim().length < 2 || window._splitModeEnabled) {
+            if (hintEl) hintEl.classList.add('hidden');
+            return;
+        }
+        _suggestTimer = setTimeout(() => {
+            const dateInput = document.querySelector('#modal-tambah input[name="transaction_date"]');
+            const dateVal = dateInput ? dateInput.value : '';
+            fetch(`{{ route('category.rules.match') }}?description=${encodeURIComponent(desc)}&date=${encodeURIComponent(dateVal)}`, {
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data || !data.matched || !data.category_id) {
+                    if (hintEl) hintEl.classList.add('hidden');
+                    return;
+                }
+                const catSelect = document.getElementById('form-category-id');
+                if (catSelect) {
+                    catSelect.value = String(data.category_id);
+                }
+                const budgetSelect = document.getElementById('form-budget-item-id');
+                if (budgetSelect && data.budget_item_id) {
+                    budgetSelect.value = String(data.budget_item_id);
+                }
+                if (hintEl) {
+                    hintEl.textContent = `⚡ Auto: ${data.category_name || 'Cocok'}`;
+                    hintEl.classList.remove('hidden');
+                }
+            })
+            .catch(() => {});
+        }, 300);
+    }
+
+    // Split Transaksi Builder
+    window._splitModeEnabled = false;
+    window._splitRowIndex = 0;
+
+    function toggleSplitMode() {
+        window._splitModeEnabled = !window._splitModeEnabled;
+        const box = document.getElementById('split-builder-box');
+        const btn = document.getElementById('btn-toggle-split');
+        const fieldBudget = document.getElementById('field-budget-item');
+        const fieldCategory = document.getElementById('field-category');
+        const container = document.getElementById('split-rows-container');
+
+        if (window._splitModeEnabled) {
+            box.classList.remove('hidden');
+            btn.textContent = 'Batalkan Split';
+            if (fieldBudget) fieldBudget.classList.add('hidden');
+            if (fieldCategory) fieldCategory.classList.add('hidden');
+            if (container && container.children.length === 0) {
+                addSplitRow();
+                addSplitRow();
+            }
+            updateSplitSummary();
+        } else {
+            box.classList.add('hidden');
+            btn.textContent = 'Aktifkan Split';
+            if (fieldBudget) fieldBudget.classList.remove('hidden');
+            if (fieldCategory) fieldCategory.classList.remove('hidden');
+            if (container) container.innerHTML = '';
+        }
+    }
+
+    function addSplitRow() {
+        const container = document.getElementById('split-rows-container');
+        if (!container) return;
+
+        const idx = window._splitRowIndex++;
+        const catOptions = document.getElementById('form-category-id')?.innerHTML || '<option value="">Pilih Kategori</option>';
+        const budgetOptions = document.getElementById('form-budget-item-id')?.innerHTML || '<option value="">-- Tanpa Pos --</option>';
+
+        const row = document.createElement('div');
+        row.className = 'split-row p-2.5 bg-white rounded-xl border border-gray-200 space-y-2';
+        row.innerHTML = `
+            <div class="grid grid-cols-12 gap-2 items-center">
+                <select name="splits[${idx}][category_id]" required class="col-span-5 text-xs border border-gray-200 rounded-lg px-2 py-2 bg-white">
+                    ${catOptions}
+                </select>
+                <input type="number" name="splits[${idx}][amount]" min="1" step="1" required placeholder="Nominal"
+                       oninput="updateSplitSummary()"
+                       class="split-amount-input col-span-5 text-xs border border-gray-200 rounded-lg px-2.5 py-2 font-semibold">
+                <button type="button" onclick="removeSplitRow(this)" class="col-span-2 text-xs font-bold text-rose-500 hover:text-rose-700 py-1.5">
+                    Hapus
+                </button>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <select name="splits[${idx}][budget_item_id]" class="text-[11px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                    ${budgetOptions}
+                </select>
+                <input type="text" name="splits[${idx}][description]" placeholder="Catatan item (opsional)"
+                       class="text-[11px] border border-gray-200 rounded-lg px-2 py-1.5">
+            </div>
+        `;
+        container.appendChild(row);
+        updateSplitSummary();
+    }
+
+    function removeSplitRow(btn) {
+        const row = btn.closest('.split-row');
+        if (row) row.remove();
+        updateSplitSummary();
+    }
+
+    function updateSplitSummary() {
+        if (!window._splitModeEnabled) return;
+        const target = parseFloat(document.getElementById('nominal-raw')?.value || '0') || 0;
+        let sum = 0;
+        document.querySelectorAll('.split-amount-input').forEach(inp => {
+            sum += parseFloat(inp.value || '0') || 0;
+        });
+
+        const sumEl = document.getElementById('split-sum-label');
+        const diffEl = document.getElementById('split-diff-label');
+        if (sumEl) sumEl.textContent = 'Rp ' + sum.toLocaleString('id-ID');
+
+        if (diffEl) {
+            const diff = target - sum;
+            if (target > 0 && Math.abs(diff) < 0.01) {
+                diffEl.textContent = '✓ Pas dengan total';
+                diffEl.className = 'font-bold text-emerald-600';
+            } else if (diff > 0) {
+                diffEl.textContent = 'Sisa belum dibagi: Rp ' + diff.toLocaleString('id-ID');
+                diffEl.className = 'font-bold text-amber-600';
+            } else if (diff < 0) {
+                diffEl.textContent = 'Kelebihan: Rp ' + Math.abs(diff).toLocaleString('id-ID');
+                diffEl.className = 'font-bold text-rose-600';
+            } else {
+                diffEl.textContent = '';
+            }
+        }
+    }
 </script>
