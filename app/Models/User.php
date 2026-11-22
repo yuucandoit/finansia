@@ -29,6 +29,8 @@ class User extends Authenticatable
         'telegram_notifications_enabled',
         'plan_tier',
         'plan_expires_at',
+        'payday_day',
+        'payday_weekend_adjust',
     ];
 
     /**
@@ -53,6 +55,8 @@ class User extends Authenticatable
             'password' => 'hashed',
             'telegram_notifications_enabled' => 'boolean',
             'plan_expires_at' => 'datetime',
+            'payday_day' => 'integer',
+            'payday_weekend_adjust' => 'boolean',
         ];
     }
 

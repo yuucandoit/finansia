@@ -62,11 +62,22 @@
                 </a>
             </div>
 
-            <!-- Search Form -->
-            <form action="{{ route('transaction.index') }}" method="GET" class="flex items-center gap-2">
+            <!-- Search & P2P Cycle Form -->
+            <form action="{{ route('transaction.index') }}" method="GET" class="flex flex-wrap items-center gap-2">
                 @if(request('type'))
                     <input type="hidden" name="type" value="{{ request('type') }}">
                 @endif
+                <select name="cycle" onchange="this.form.submit()"
+                        class="border border-indigo-200 bg-indigo-50/50 text-indigo-800 rounded-xl px-3 py-2 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <option value="all" {{ ($selectedCycle ?? 'all') === 'all' ? 'selected' : '' }}>
+                        Semua Periode (Payday Tgl {{ $paydayDay ?? 1 }})
+                    </option>
+                    @foreach(($availableCycles ?? []) as $cyc)
+                        <option value="{{ $cyc['key'] }}" {{ ($selectedCycle ?? 'all') === $cyc['key'] ? 'selected' : '' }}>
+                            P2P: {{ $cyc['label'] }}
+                        </option>
+                    @endforeach
+                </select>
                 <input name="search" value="{{ request('search') }}" type="text" placeholder="Cari transaksi..." 
                        class="border border-gray-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none flex-1 md:w-auto">
                 <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold shadow-md shadow-blue-200 whitespace-nowrap transition-all">
@@ -74,6 +85,17 @@
                 </button>
             </form>
         </div>
+
+        @if(!empty($activeCycleInfo))
+            <div class="mx-3 sm:mx-4 mb-3 px-4 py-2.5 rounded-2xl bg-indigo-50 border border-indigo-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span class="font-semibold text-indigo-900">
+                    📅 Menampilkan Siklus Payday (P2P): <strong>{{ $activeCycleInfo['label'] }}</strong>
+                </span>
+                <a href="{{ route('profile.edit') }}" class="font-bold text-indigo-700 hover:underline">
+                    Ubah Tgl Payday (Tgl {{ $paydayDay ?? 1 }}) →
+                </a>
+            </div>
+        @endif
 
         <div class="px-3 sm:px-4 pb-24">
             <div class="flex justify-between items-center mb-4">

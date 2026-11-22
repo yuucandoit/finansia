@@ -52,8 +52,20 @@
 
             <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
                 <span>Basis: <strong class="text-gray-700">{{ $safe['pool_label'] ?? 'Anggaran Bulan Ini' }}</strong></span>
-                <span>Sisa dana bulan ini: <strong class="{{ ($safe['remaining_pool'] ?? 0) < 0 ? 'text-rose-600' : 'text-emerald-700' }}">Rp {{ number_format($safe['remaining_pool'] ?? 0, 0, ',', '.') }}</strong></span>
+                <span>Sisa dana: <strong class="{{ ($safe['remaining_pool'] ?? 0) < 0 ? 'text-rose-600' : 'text-emerald-700' }}">Rp {{ number_format($safe['remaining_pool'] ?? 0, 0, ',', '.') }}</strong></span>
             </div>
+
+            @if(!empty($safe['payday_cycle']))
+                @php $pc = $safe['payday_cycle']; @endphp
+                <div class="mt-2.5 pt-2.5 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                    <span class="text-gray-500">
+                        ⏳ <strong>{{ $pc['days_to_payday'] }} hari</strong> menuju Payday (Tgl {{ $pc['payday_day'] }}) • {{ $pc['label'] }}
+                    </span>
+                    @if(!empty($pc['survival_mode']))
+                        <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 font-bold">Mode Hemat Akhir Siklus</span>
+                    @endif
+                </div>
+            @endif
         </div>
 
         <!-- MoM Spending Insights Card -->

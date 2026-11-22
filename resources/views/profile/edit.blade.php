@@ -21,6 +21,45 @@
 
             <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
                 <div class="max-w-xl space-y-4">
+                    <div>
+                        <h3 class="text-lg font-medium text-gray-900">Siklus Gajian (Payday-to-Payday Cycle)</h3>
+                        <p class="text-sm text-gray-600 mt-1">
+                            Tentukan tanggal gajian Anda agar filter transaksi, batas aman belanja harian, dan hitung mundur gajian mengikuti siklus P2P Anda.
+                        </p>
+                    </div>
+
+                    @if(session('payday_status'))
+                        <div class="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+                            {{ session('payday_status') }}
+                        </div>
+                    @endif
+
+                    <form method="POST" action="{{ route('profile.payday.update') }}" class="space-y-3">
+                        @csrf
+                        @method('PATCH')
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">Tanggal Gajian (1–31)</label>
+                                <input type="number" name="payday_day" min="1" max="31" required
+                                       value="{{ old('payday_day', auth()->user()->payday_day ?? 1) }}"
+                                       class="w-28 px-3 py-2 text-xs font-bold rounded-md border border-gray-300">
+                            </div>
+                            <label class="flex items-center gap-2 text-xs text-gray-700 pt-5">
+                                <input type="checkbox" name="payday_weekend_adjust" value="1"
+                                       {{ old('payday_weekend_adjust', auth()->user()->payday_weekend_adjust) ? 'checked' : '' }}
+                                       class="rounded border-gray-300 text-indigo-600">
+                                <span>Geser ke hari Jumat jika jatuh di akhir pekan</span>
+                            </label>
+                        </div>
+                        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-widest rounded-md transition">
+                            Simpan Tanggal Payday
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
+                <div class="max-w-xl space-y-4">
                     <div class="flex items-center justify-between gap-2">
                         <div>
                             <h3 class="text-lg font-medium text-gray-900">Telegram Bot Copilot</h3>

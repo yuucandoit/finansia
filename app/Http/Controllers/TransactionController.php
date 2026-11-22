@@ -7,6 +7,7 @@ use App\Models\Saving;
 use App\Models\Transaction;
 use App\Models\TransactionItem;
 use App\Services\DuplicateTransactionHandler;
+use App\Services\PaydayCycleService;
 use App\Services\PdfImportService;
 use App\Services\SmartRuleService;
 use Carbon\Carbon;
@@ -44,6 +45,22 @@ class TransactionController extends Controller
             }
         }
 
+        // Filter Payday-to-Payday (P2P) Cycle
+        $user = auth()->user();
+        $paydayService = app(PaydayCycleService::class);
+        $availableCycles = $paydayService->getAvailableCycles($user, 6);
+        $selectedCycle = $request->query('cycle', 'all');
+        $activeCycleInfo = null;
+
+        if ($selectedCycle !== 'all' && $selectedCycle !== '' && is_numeric($selectedCycle)) {
+            $offset = max(-24, min(0, (int) $selectedCycle));
+            $activeCycleInfo = $paydayService->getCycleForOffset($user, $offset);
+            $query->whereBetween('transaction_date', [
+                $activeCycleInfo['start']->toDateString(),
+                $activeCycleInfo['end']->toDateString(),
+            ]);
+        }
+
         $transaction = $query->orderBy('transaction_date','DESC')->paginate(15);
         
         // Append query parameters to pagination links
@@ -67,12 +84,16 @@ class TransactionController extends Controller
         $budgetItems = $activeBudget ? $activeBudget->items : collect([]);
         
         return view('transaction', [
-            'transaction'  => $transaction,
-            'saving'       => $saving,
-            'categories'   => $categories,
-            'budgetItems'  => $budgetItems,
-            'totalCashIn'  => $totalCashIn,
-            'totalCashOut' => $totalCashOut,
+            'transaction'     => $transaction,
+            'saving'          => $saving,
+            'categories'      => $categories,
+            'budgetItems'     => $budgetItems,
+            'totalCashIn'     => $totalCashIn,
+            'totalCashOut'    => $totalCashOut,
+            'availableCycles' => $availableCycles,
+            'selectedCycle'   => (string) $selectedCycle,
+            'activeCycleInfo' => $activeCycleInfo,
+            'paydayDay'       => (int) ($user->payday_day ?? 1),
         ]);
     }
 

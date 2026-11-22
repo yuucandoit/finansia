@@ -155,6 +155,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/profile/telegram/code', [\App\Http\Controllers\TelegramController::class, 'generateLinkCode'])->name('profile.telegram.code');
     Route::patch('/profile/telegram/toggle', [\App\Http\Controllers\TelegramController::class, 'toggleNotifications'])->name('profile.telegram.toggle');
     Route::delete('/profile/telegram/unlink', [\App\Http\Controllers\TelegramController::class, 'unlink'])->name('profile.telegram.unlink');
+    Route::patch('/profile/payday', [\App\Http\Controllers\PaydayController::class, 'update'])->name('profile.payday.update');
 });
 
 Route::get('/notifikasi/feed', [NotificationController::class, 'feed'])

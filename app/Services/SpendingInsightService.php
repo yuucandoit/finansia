@@ -87,21 +87,42 @@ class SpendingInsightService
         $totalBudget = $budget ? (float) $budget->items->sum('amount') : 0.0;
         $daysInMonth = (int) $now->daysInMonth;
         $todayDay = (int) $now->day;
-        $daysRemaining = max(1, $daysInMonth - $todayDay + 1);
+
+        $paydayService = app(PaydayCycleService::class);
+        $activeCycle = $paydayService->getCycleForOffset($user, 0, $now);
+        $isCustomPayday = $activeCycle['is_custom_payday'];
+
+        if ($isCustomPayday) {
+            $daysRemaining = max(1, (int) $activeCycle['days_remaining']);
+            $cycleStartStr = $activeCycle['start']->toDateString();
+            $cycleEndStr = $activeCycle['end']->toDateString();
+            $spentForPool = (float) Transaction::where('user_id', $userId)
+                ->whereNull('transfer_group_id')
+                ->where('type', 'Cash Out')
+                ->whereBetween('transaction_date', [$cycleStartStr, $cycleEndStr])
+                ->sum('amount');
+        } else {
+            $daysRemaining = max(1, $daysInMonth - $todayDay + 1);
+            $spentForPool = $spentThisMonth;
+        }
 
         $hasBudget = $totalBudget > 0;
         if ($hasBudget) {
-            $remainingPool = $totalBudget - $spentThisMonth;
-            $poolLabel = 'Anggaran Bulan Ini';
+            $remainingPool = $totalBudget - $spentForPool;
+            $poolLabel = $isCustomPayday ? 'Anggaran Siklus Payday' : 'Anggaran Bulan Ini';
             $poolTotal = $totalBudget;
         } else {
-            $income = $cashInThisMonth ?? (float) Transaction::where('user_id', $userId)
-                ->whereNull('transfer_group_id')
-                ->where('type', 'Cash In')
-                ->whereBetween('transaction_date', [$startOfThisMonth->toDateString(), $endOfThisMonth->toDateString()])
-                ->sum('amount');
-            $remainingPool = $income - $spentThisMonth;
-            $poolLabel = 'Sisa Arus Kas Bulan Ini';
+            $poolStart = $isCustomPayday ? $activeCycle['start']->toDateString() : $startOfThisMonth->toDateString();
+            $poolEnd = $isCustomPayday ? $activeCycle['end']->toDateString() : $endOfThisMonth->toDateString();
+            $income = (!$isCustomPayday && $cashInThisMonth !== null)
+                ? $cashInThisMonth
+                : (float) Transaction::where('user_id', $userId)
+                    ->whereNull('transfer_group_id')
+                    ->where('type', 'Cash In')
+                    ->whereBetween('transaction_date', [$poolStart, $poolEnd])
+                    ->sum('amount');
+            $remainingPool = $income - $spentForPool;
+            $poolLabel = $isCustomPayday ? 'Sisa Arus Kas Siklus Payday' : 'Sisa Arus Kas Bulan Ini';
             $poolTotal = $income;
         }
 
@@ -119,13 +140,20 @@ class SpendingInsightService
             'has_budget'      => $hasBudget,
             'pool_label'      => $poolLabel,
             'pool_total'      => $poolTotal,
-            'spent_month'     => $spentThisMonth,
+            'spent_month'     => $spentForPool,
             'remaining_pool'  => $remainingPool,
             'days_remaining'  => $daysRemaining,
             'daily_safe'      => $dailySafe,
             'spent_today'     => $spentToday,
             'status'          => $safeStatus,
             'today_over'      => $dailySafe > 0 && $spentToday > $dailySafe,
+            'payday_cycle'    => [
+                'is_custom'      => $isCustomPayday,
+                'payday_day'     => $activeCycle['payday_day'],
+                'label'          => $activeCycle['label'],
+                'days_to_payday' => $daysRemaining,
+                'survival_mode'  => $daysRemaining <= 7 && in_array($safeStatus, ['tight', 'over'], true),
+            ],
         ];
 
         // 2. MoM Spending Insights
