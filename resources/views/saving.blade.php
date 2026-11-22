@@ -25,7 +25,7 @@
                     <h1 class="text-2xl sm:text-3xl font-bold text-gray-800">💰 Tabungan Saya</h1>
                     <p class="text-xs sm:text-sm text-gray-500 mt-1">Kelola rekening tabungan Anda</p>
                 </div>
-                <button onclick="openModalCreate()" class="w-full sm:w-auto justify-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-200 transition-all flex items-center gap-2">
+                <button onclick="openModalCreate()" class="w-full sm:w-auto justify-center bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-5 py-2.5 sm:px-6 sm:py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>

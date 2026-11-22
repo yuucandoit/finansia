@@ -80,7 +80,7 @@
                 </select>
                 <input name="search" value="{{ request('search') }}" type="text" placeholder="Cari transaksi..." 
                        class="border border-gray-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none flex-1 md:w-auto">
-                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold shadow-md shadow-blue-200 whitespace-nowrap transition-all">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all">
                     Cari
                 </button>
             </form>

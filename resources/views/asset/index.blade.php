@@ -7,7 +7,7 @@
                 <p class="text-xs sm:text-sm text-gray-500 mt-1">Lacak portofolio emas, reksadana, saham, valas, dan hitung total kekayaan bersih (Net Worth) Anda</p>
             </div>
             <button type="button" onclick="openCreateAssetModal()"
-                    class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-200 transition-all">
+                    class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold text-sm transition-all">
                 + Tambah Aset Baru
             </button>
         </div>
