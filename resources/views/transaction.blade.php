@@ -798,15 +798,21 @@
                     Saldo rekening terkait akan otomatis dikembalikan sesuai nominal transaksi ini.
                 </p>
 
-                <form id="form-delete-tx" method="POST" class="flex gap-3">
+                <form id="form-delete-tx" method="POST" class="space-y-4">
                     @csrf
                     @method('DELETE')
-                    <button type="button" onclick="toggleModal('modal-delete-tx')" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-xl font-semibold text-sm transition-all">
-                        Batal
-                    </button>
-                    <button type="submit" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-red-200 transition-all">
-                        Ya, Hapus
-                    </button>
+                    <label class="flex items-start gap-2.5 text-left text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-xl p-3 cursor-pointer">
+                        <input type="checkbox" name="skip_balance_adjust" value="1" class="mt-0.5 rounded border-gray-300 text-blue-600">
+                        <span><strong>Hapus riwayat saja</strong> (jangan ubah saldo rekening saat ini — cocok untuk transaksi lama hasil import e-statement)</span>
+                    </label>
+                    <div class="flex gap-3">
+                        <button type="button" onclick="toggleModal('modal-delete-tx')" class="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 px-4 rounded-xl font-semibold text-sm transition-all">
+                            Batal
+                        </button>
+                        <button type="submit" class="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-xl font-bold text-sm shadow-lg shadow-red-200 transition-all">
+                            Ya, Hapus
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>

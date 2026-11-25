@@ -445,45 +445,54 @@ class TransactionController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $userId = auth()->id();
         $transaction = Transaction::where('user_id', $userId)->findOrFail($id);
+        $skipBalanceAdjust = $request->boolean('skip_balance_adjust', false);
 
         try {
-            DB::transaction(function () use ($userId, $transaction) {
+            DB::transaction(function () use ($userId, $transaction, $skipBalanceAdjust) {
                 if ($transaction->transfer_group_id) {
                     $pairedTransactions = Transaction::where('user_id', $userId)
                         ->where('transfer_group_id', $transaction->transfer_group_id)
                         ->get();
 
                     foreach ($pairedTransactions as $tx) {
-                        if ($tx->savings_id) {
+                        if (!$skipBalanceAdjust && $tx->savings_id) {
                             $saving = Saving::where('user_id', $userId)->lockForUpdate()->find($tx->savings_id);
                             if ($saving) {
-                                $effect = $tx->balanceEffect();
-                                $saving->update([
-                                    'current_balance' => (float) $saving->current_balance - $effect,
-                                ]);
+                                $current = (float) $saving->current_balance;
+                                $newBalance = $current - $tx->balanceEffect();
+                                if ($current >= 0 && $newBalance < 0) {
+                                    $newBalance = 0.0;
+                                }
+                                $saving->update(['current_balance' => $newBalance]);
                             }
                         }
                         $tx->delete();
                     }
                 } else {
-                    if ($transaction->savings_id) {
+                    if (!$skipBalanceAdjust && $transaction->savings_id) {
                         $saving = Saving::where('user_id', $userId)->lockForUpdate()->find($transaction->savings_id);
                         if ($saving) {
-                            $effect = $transaction->balanceEffect();
-                            $saving->update([
-                                'current_balance' => (float) $saving->current_balance - $effect,
-                            ]);
+                            $current = (float) $saving->current_balance;
+                            $newBalance = $current - $transaction->balanceEffect();
+                            if ($current >= 0 && $newBalance < 0) {
+                                $newBalance = 0.0;
+                            }
+                            $saving->update(['current_balance' => $newBalance]);
                         }
                     }
                     $transaction->delete();
                 }
             });
 
-            return redirect()->back()->with('success', 'Transaksi berhasil dihapus dan saldo rekening telah dikembalikan!');
+            $msg = $skipBalanceAdjust
+                ? 'Riwayat transaksi berhasil dihapus tanpa mengubah saldo rekening.'
+                : 'Transaksi berhasil dihapus dan saldo rekening telah dikembalikan!';
+
+            return redirect()->back()->with('success', $msg);
         } catch (\Exception $e) {
             return redirect()->back()->with('error', 'Gagal menghapus transaksi: ' . $e->getMessage());
         }
@@ -782,6 +791,8 @@ class TransactionController extends Controller
             $bankCode = 'bca';
         } elseif (str_contains($bankName, 'mandiri')) {
             $bankCode = 'mandiri';
+        } elseif (str_contains($bankName, 'bri')) {
+            $bankCode = 'bri';
         }
 
         $file = $request->file('file');

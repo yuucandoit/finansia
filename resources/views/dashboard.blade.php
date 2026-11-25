@@ -1556,6 +1556,7 @@
                         savings_id: window.selectedSavingId,
                         update_balance: shouldUpdateBalance,
                         final_balance: finalBalance,
+                        skip_duplicates: false,
                         transactions: selectedRows.map(r => ({
                             transaction_date: r.transaction_date,
                             type: r.type,

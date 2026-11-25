@@ -296,9 +296,6 @@ class PdfImportService
                 $balanceRaw = $row['Balance'] ?? $row['Saldo'] ?? '';
                 $balance = !empty($balanceRaw) ? $this->parseIndonesianAmount($balanceRaw) : null;
             }
-            if ($balance !== null) {
-                $finalBalance = $balance;
-            }
 
             // 5. Auto-resolve Category & Budget Item jika memungkinkan
             $suggestedCategoryId = null;
@@ -358,6 +355,19 @@ class PdfImportService
                 'budget_item_id'         => $suggestedBudgetItemId,
                 'is_selected'            => true,
             ];
+        }
+
+        // Tentukan final_balance berdasarkan tanggal transaksi paling baru (mendukung urutan ascending maupun descending)
+        $itemsWithBalance = array_values(array_filter($items, fn($it) => $it['balance'] !== null));
+        if (!empty($itemsWithBalance)) {
+            $firstDate = $itemsWithBalance[0]['transaction_date'];
+            $lastDate = $itemsWithBalance[count($itemsWithBalance) - 1]['transaction_date'];
+            $isDescending = $firstDate > $lastDate;
+
+            $maxDate = max(array_column($itemsWithBalance, 'transaction_date'));
+            $onMaxDate = array_values(array_filter($itemsWithBalance, fn($it) => $it['transaction_date'] === $maxDate));
+            $latestRow = $isDescending ? $onMaxDate[0] : $onMaxDate[count($onMaxDate) - 1];
+            $finalBalance = $latestRow['balance'];
         }
 
         $duplicateCount = 0;
@@ -519,7 +529,8 @@ class PdfImportService
                         $saving->id,
                         $description,
                         $amount,
-                        $transactionDate
+                        $transactionDate,
+                        $type
                     );
 
                     if ($existing) {
@@ -549,23 +560,19 @@ class PdfImportService
 
                 $direction = ($type === 'Cash In') ? Transaction::DIRECTION_IN : Transaction::DIRECTION_OUT;
 
-                Transaction::updateOrCreate(
-                    [
-                        'user_id'          => $user->id,
-                        'savings_id'       => $saving->id,
-                        'transaction_date' => $transactionDate,
-                        'amount'           => $amount,
-                        'description'      => $description,
-                    ],
-                    [
-                        'type'           => $type,
-                        'direction'      => $direction,
-                        'category_id'    => $categoryId,
-                        'budget_item_id' => $budgetItemId,
-                        'fee'            => 0,
-                        'is_manual'      => false,
-                    ]
-                );
+                Transaction::create([
+                    'user_id'          => $user->id,
+                    'savings_id'       => $saving->id,
+                    'transaction_date' => $transactionDate,
+                    'amount'           => $amount,
+                    'description'      => $description,
+                    'type'             => $type,
+                    'direction'        => $direction,
+                    'category_id'      => $categoryId,
+                    'budget_item_id'   => $budgetItemId,
+                    'fee'              => 0,
+                    'is_manual'        => false,
+                ]);
 
                 $savedCount++;
                 $totalAmount += $amount;

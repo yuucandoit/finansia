@@ -312,6 +312,7 @@ class TransactionController extends Controller
     public function destroy(Request $request, $id): JsonResponse
     {
         $userId = $request->user()->id;
+        $skipBalanceAdjust = $request->boolean('skip_balance_adjust', false);
 
         $tx = Transaction::where('user_id', $userId)->find($id);
 
@@ -320,24 +321,34 @@ class TransactionController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($tx, $userId) {
+            DB::transaction(function () use ($tx, $userId, $skipBalanceAdjust) {
                 // Transfer antar rekening: hapus kedua sisi sekaligus agar saldo tetap konsisten
                 $legs = $tx->transfer_group_id
                     ? Transaction::where('user_id', $userId)->where('transfer_group_id', $tx->transfer_group_id)->get()
                     : collect([$tx]);
 
                 foreach ($legs as $leg) {
-                    $saving = Saving::find($leg->savings_id);
-                    if ($saving) {
-                        // Kebalikan dari efek transaksi terhadap saldo (termasuk fee)
-                        $saving->decrement('current_balance', $leg->balanceEffect());
+                    if (!$skipBalanceAdjust) {
+                        $saving = Saving::where('user_id', $userId)->lockForUpdate()->find($leg->savings_id);
+                        if ($saving) {
+                            $current = (float) $saving->current_balance;
+                            $newBalance = $current - $leg->balanceEffect();
+                            if ($current >= 0 && $newBalance < 0) {
+                                $newBalance = 0.0;
+                            }
+                            $saving->update(['current_balance' => $newBalance]);
+                        }
                     }
 
                     $leg->delete();
                 }
             });
 
-            return $this->successResponse(null, 'Transaksi berhasil dihapus dan saldo telah disesuaikan kembali.');
+            $msg = $skipBalanceAdjust
+                ? 'Transaksi berhasil dihapus tanpa mengubah saldo rekening.'
+                : 'Transaksi berhasil dihapus dan saldo telah disesuaikan kembali.';
+
+            return $this->successResponse(null, $msg);
         } catch (\Exception $e) {
             return $this->errorResponse('Gagal menghapus transaksi: ' . $e->getMessage(), 500);
         }
@@ -395,6 +406,8 @@ class TransactionController extends Controller
             $bankCode = 'bca';
         } elseif (str_contains($bankName, 'mandiri')) {
             $bankCode = 'mandiri';
+        } elseif (str_contains($bankName, 'bri')) {
+            $bankCode = 'bri';
         }
 
         $file = $request->file('file');

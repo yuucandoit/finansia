@@ -24,10 +24,47 @@ class DuplicateTransactionHandler
     }
 
     /**
+     * Ekstrak kode referensi unik bank dari deskripsi (QRIS, ID#, REF, BI-FAST, dll).
+     */
+    public function extractReferenceIds(string $description): array
+    {
+        $refs = [];
+        $patterns = [
+            '/\bQRIS[A-Z]*\d{6,}(?:#\d+)?/i',
+            '/\bID#\s*([A-Z0-9-]{6,})/i',
+            '/\bREF(?:ERENSI)?[:#\s-]*([A-Z0-9-]{6,})/i',
+            '/\b(?:TRX|TXN|INV|VA)[-_#:\s]*([A-Z0-9]{6,})/i',
+            '/#(\d{8,})/',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (preg_match_all($pattern, $description, $matches)) {
+                foreach ($matches[0] as $idx => $fullMatch) {
+                    $token = !empty($matches[1][$idx]) ? $matches[1][$idx] : $fullMatch;
+                    $normalized = strtoupper(preg_replace('/\s+/', '', $token));
+                    if (strlen($normalized) >= 6) {
+                        $refs[] = $normalized;
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($refs));
+    }
+
+    /**
      * Memeriksa apakah dua deskripsi transaksi dianggap cocok (identik atau sangat serupa).
      */
     public function isDescriptionMatching(string $desc1, string $desc2): bool
     {
+        $refs1 = $this->extractReferenceIds($desc1);
+        $refs2 = $this->extractReferenceIds($desc2);
+
+        if (!empty($refs1) && !empty($refs2)) {
+            $shared = array_intersect($refs1, $refs2);
+            return !empty($shared);
+        }
+
         $norm1 = $this->normalizeDescription($desc1);
         $norm2 = $this->normalizeDescription($desc2);
 
@@ -84,7 +121,8 @@ class DuplicateTransactionHandler
         int $savingsId,
         string $description,
         float $amount,
-        ?string $transactionDate = null
+        ?string $transactionDate = null,
+        ?string $type = null
     ): ?Transaction {
         $amountRounded = round($amount, 2);
 
@@ -93,11 +131,23 @@ class DuplicateTransactionHandler
             ->where('savings_id', $savingsId)
             ->where('amount', $amountRounded);
 
+        if ($type !== null && $type !== '') {
+            $query->where('type', $type);
+        }
+
+        $targetDate = $transactionDate ? Carbon::parse($transactionDate)->startOfDay() : null;
+        if ($targetDate) {
+            $query->whereBetween('transaction_date', [
+                $targetDate->copy()->subDays(2)->toDateString(),
+                $targetDate->copy()->addDays(2)->toDateString(),
+            ]);
+        }
+
         $candidates = $query->get();
 
         // Cari prioritas kecocokan tanggal yang sama terlebih dahulu
         $similarCandidate = null;
-        $targetDateStr = $transactionDate ? Carbon::parse($transactionDate)->format('Y-m-d') : null;
+        $targetDateStr = $targetDate ? $targetDate->format('Y-m-d') : null;
 
         foreach ($candidates as $candidate) {
             if ($this->isDescriptionMatching($description, $candidate->description)) {
@@ -179,32 +229,48 @@ class DuplicateTransactionHandler
             $amount = (float) ($item['amount'] ?? 0);
             $amtKey = (string) round($amount, 2);
             $description = trim($item['description'] ?? '');
-            $incomingDateStr = !empty($item['transaction_date'])
-                ? Carbon::parse($item['transaction_date'])->format('Y-m-d')
+            $incomingType = $item['type'] ?? null;
+            $incomingDate = !empty($item['transaction_date'])
+                ? Carbon::parse($item['transaction_date'])->startOfDay()
                 : null;
+            $incomingDateStr = $incomingDate ? $incomingDate->format('Y-m-d') : null;
 
             $matchedTx = null;
             $candidates = $groupedCandidates[$amtKey] ?? [];
 
-            // 1. Coba cari kecocokan dengan transaksi tanggal yang sama di database
+            // 1. Coba cari kecocokan dengan transaksi tipe & tanggal yang sama persis di database
             foreach ($candidates as $cand) {
                 if (in_array($cand->id, $claimedTxIds, true)) {
                     continue;
                 }
+                if ($incomingType && $cand->type !== $incomingType) {
+                    continue;
+                }
 
                 if ($this->isDescriptionMatching($description, $cand->description)) {
-                    $candDate = $cand->transaction_date ? Carbon::parse($cand->transaction_date)->format('Y-m-d') : null;
-                    if ($incomingDateStr && $candDate === $incomingDateStr) {
+                    $candDateStr = $cand->transaction_date ? Carbon::parse($cand->transaction_date)->format('Y-m-d') : null;
+                    if ($incomingDateStr && $candDateStr === $incomingDateStr) {
                         $matchedTx = $cand;
                         break;
                     }
                 }
             }
 
-            // 2. Jika tidak ada yang tanggalnya sama persis, cari kecocokan nama dan jumlah pada tanggal berbeda
-            if (!$matchedTx) {
+            // 2. Jika tidak ada tanggal sama persis, cari kandidat dalam rentang ±2 hari (settlement date)
+            if (!$matchedTx && $incomingDate) {
                 foreach ($candidates as $cand) {
                     if (in_array($cand->id, $claimedTxIds, true)) {
+                        continue;
+                    }
+                    if ($incomingType && $cand->type !== $incomingType) {
+                        continue;
+                    }
+                    if (!$cand->transaction_date) {
+                        continue;
+                    }
+
+                    $candDate = Carbon::parse($cand->transaction_date)->startOfDay();
+                    if (abs($incomingDate->diffInDays($candDate, false)) > 2) {
                         continue;
                     }
 
@@ -216,7 +282,7 @@ class DuplicateTransactionHandler
             }
 
             // 3. Cek juga apakah duplikat dengan baris sebelumnya di dalam file impor yang sama
-            $batchKey = $this->normalizeDescription($description) . '|' . $amtKey . '|' . ($incomingDateStr ?? '');
+            $batchKey = ($incomingType ?? '') . '|' . $this->normalizeDescription($description) . '|' . $amtKey . '|' . ($incomingDateStr ?? '');
             $isDuplicateInBatch = isset($seenInBatch[$batchKey]);
 
             if ($matchedTx) {
@@ -233,10 +299,10 @@ class DuplicateTransactionHandler
 
                 $reason = $isExactDate
                     ? "Transaksi serupa sudah tercatat di rekening ini pada tanggal yang sama ({$candDateFormatted})"
-                    : "Transaksi serupa sudah tercatat di rekening ini pada {$candDateFormatted} (Rp " . number_format($amount, 0, ',', '.') . ")";
+                    : "Kemungkinan duplikat (beda tanggal ±2 hari): tercatat pada {$candDateFormatted} (Rp " . number_format($amount, 0, ',', '.') . ")";
 
                 $item['is_duplicate'] = true;
-                $item['duplicate_type'] = $isExactDate ? 'exact' : 'similar';
+                $item['duplicate_type'] = $isExactDate ? 'exact' : 'possible';
                 $item['duplicate_reason'] = $reason;
                 $item['matched_transaction'] = [
                     'id'                     => $matchedTx->id,
@@ -246,16 +312,16 @@ class DuplicateTransactionHandler
                     'amount'                 => (float) $matchedTx->amount,
                 ];
 
-                // Otomatis uncheck transaksi yang duplikat
-                $item['is_selected'] = false;
+                // Exact duplicate -> auto-uncheck; possible (±2 hari) -> tetap tercentang dengan peringatan
+                $item['is_selected'] = $isExactDate ? false : ($item['is_selected'] ?? true);
                 $duplicateCount++;
 
             } elseif ($isDuplicateInBatch) {
                 $item['is_duplicate'] = true;
                 $item['duplicate_type'] = 'batch';
-                $item['duplicate_reason'] = 'Baris transaksi kembar terdeteksi di dalam file impor yang sama';
+                $item['duplicate_reason'] = 'Baris transaksi kembar dalam file ini (tetap dicentang jika memang 2 transaksi terpisah)';
                 $item['matched_transaction'] = null;
-                $item['is_selected'] = false;
+                $item['is_selected'] = $item['is_selected'] ?? true;
                 $duplicateCount++;
 
             } else {
